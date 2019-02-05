@@ -165,7 +165,7 @@ class CoordinateConverter(object):
         if self.useSubplot:
             return self.fieldPartition_to_plotNum_32(plot_row, plot_col)
         else:
-            if plot_row == 0:
+            if plot_row == 0 or plot_col == 0:
                 return 0
             
             if plot_row % 2 == 0:
@@ -177,7 +177,7 @@ class CoordinateConverter(object):
     
     def fieldPartition_to_plotNum_32(self, plot_row, plot_col):
         "Converts field partition to plot number"
-        if plot_row == 0:
+        if plot_row == 0 or plot_col == 0:
             return 0
         
         if plot_row % 2 == 0:
@@ -306,6 +306,27 @@ class CoordinateConverter(object):
         ymax = gantry_coords[0][1]
         
         return range_, col, xmin, xmax, ymin, ymax
+    
+    def parse_site_from_plotNum_1728(self, plotNum):
+        plot_row = 0
+        plot_col = 0
+        cols = 32
+        col = int((plotNum-1) % cols + 1)
+        row = int((plotNum-1) / cols + 1)
+        if (row % 2) != 0:
+            plot_col = col
+        else:
+            plot_col = cols - col + 1
+
+        Range = row
+        Column = int((plot_col + 1) / 2)
+        if (plot_col % 2) != 0:
+            subplot = 'W'
+        else:
+            subplot = 'E'
+        seasonNum = self.seasonNum
+        rel = 'MAC Field Scanner Season {} Range {} Column {} {}'.format(str(seasonNum), str(Range), str(Column), subplot)
+        return rel
     
     def bety_str_parsing(self, bety_str):
         
