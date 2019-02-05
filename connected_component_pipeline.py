@@ -22,46 +22,17 @@ def options():
     args = parser.parse_args()
     return args
 
-def connected_compoent(pc_xyz_square, gradient_threshold=10, 
-                       region_pixels_lower_threshold=None, region_pixels_upper_threshold=None):
-                       #region_pixels_lower_threshold=200, region_pixels_upper_threshold=80000):
+def connected_compoent(image, gradient_threshold=10):
     '''
-    if the upper and lower bound is not given, throw the regions that  pixel from top and bottom 1/4
+    if the upper and lower bound is not given, throw the regions that  pixel count from top and bottom 1/4
     '''
-    edge = (np.abs(gx)<gradient_threshold) & (np.abs(gy)<gradient_threshold) & (pc_xyz_square[:, :, 2]>1)
+    
+    gx, gy = np.gradient(image)
+    edge = (np.abs(gx)<gradient_threshold) & (np.abs(gy)<gradient_threshold) # & (pc_xyz_square[:, :, 2]>1)
     #all_labels = measure.label(edge, background=0)
-    all_labels = measure.label(edge)
+    all_labels = measure.label(edge, connectivity=1)
     label_img = np.zeros(all_labels.shape)
-    count = 0
-    pixel_count_list = []
-    for i in range(0, np.max(all_labels)+1):
-        if np.count_nonzero(all_labels==i) < 10:
-            # discard noises
-            continue
-        pixel_count_list.append(np.count_nonzero(all_labels==i))
-    trimmed_pixcel_count_list = stats.mstats.trim(pixel_count_list, (0.1, 0.01), relative=True).compressed()
-    # print(pixel_count_list)
-    # print(trimmed_pixcel_count_list)
-    auto_lower = min(trimmed_pixcel_count_list)
-    auto_upper = max(trimmed_pixcel_count_list)
-    # print(auto_lower, auto_upper)
-    if region_pixels_lower_threshold is None:
-        region_pixels_lower_threshold = auto_lower
-    if region_pixels_upper_threshold is None:
-        region_pixels_upper_threshold = auto_upper
-    for i in range(0, np.max(all_labels)+1):
-        if np.count_nonzero(all_labels==i) <= region_pixels_lower_threshold or \
-        np.count_nonzero(all_labels==i) >= region_pixels_upper_threshold:
-            continue
-        label_img[np.where(all_labels==i)] = count
-        count += 1
-    # plt.figure(figsize=(20,10))
-    # plt.imshow(edge)
-    # plt.show()
-    # plt.figure(figsize=(20,10))
-    # plt.imshow(label_img)
-    # plt.show()
-    return label_img
+    return all_labels
 
 def get_pc_data_from_globus(folder_name, logger, sensor_name='east'):
     '''
@@ -109,15 +80,19 @@ def crop_mask_by_id(mask, xyz_map, mask_id):
     cropped_position = [[np.where(~np.all(mask == 0, axis=1))[0][0],np.where(~np.all(mask == 0, axis=1))[0][-1]],
                        [np.where(~np.all(mask == 0, axis=0))[0][0],np.where(~np.all(mask == 0, axis=0))[0][-1]]]
     return cropped_mask, cropped_xyz_map, cropped_position
+
+def find_leaves(xyz_map):
+    pass
+
     
 def run_analysis(datafolder, log_lv=logging.DEBUG):
     # TODO better logging
-    # TODO skip processed folder
-    # Skip exist pkl
     datafolder = os.path.join(datafolder, '')
     foldername = os.path.basename(os.path.dirname(datafolder))
     pkl_file_path = os.path.join(LEAF_LEN_RESULT_PATH,foldername+'.pkl')
     cpname = multiprocessing.current_process().name
+    
+    # Logger
     logger = logging.getLogger('ppln_'+foldername+'_'+cpname)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s:\t%(message)s')
@@ -126,6 +101,8 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     logger.info('Start processing')
+    
+    # Skip processed folders
     if os.path.isfile(pkl_file_path):
         try:
             with open(pkl_file_path, 'rb') as f:
@@ -135,8 +112,9 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
                     return 1
         except Exception as e:
             logger.warning('.pkl file exist but corrupted.')
-    # get data
-    # print(datafolder)
+            
+    # Get data
+    # Get .png
     filename_list = os.listdir(datafolder)
     for filename in filename_list:
         if 'east_0_g.png' in filename:
@@ -151,8 +129,7 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     except:
         logger.error('Image reading error! Skip.')
         return -1
-    # print('getting ply data..')
-    # print('foldername:',foldername)
+    # Get .ply
     if not os.path.isfile(os.path.expanduser(os.path.join(PC_TEMP_PATH, foldername+'.ply'))):
         try:
             get_pc_data_from_globus(foldername, logger)
@@ -160,7 +137,6 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
             tb = traceback.format_exc()
             logger.error('Download from globus error!\n'+tb)
             return -2
-    # print('ply data downloaded')
     ply_data_path = os.path.expanduser(os.path.join(PC_TEMP_PATH, foldername+'.ply'))
     try:
         ply_data = PlyData.read(ply_data_path)
@@ -168,6 +144,7 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
         logger.error('ply file reading error! Skip.'.format(foldername+'.ply'))
         os.remove(ply_data_path)
         return -1
+    # Read json file
     try:
         with open(os.path.join(datafolder, json_name), 'r') as json_f:
             json_data = json.load(json_f)
@@ -175,23 +152,21 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     except Exception as e:
         logger.error('Load json unsuccessed.')
         return -4
-    # check data corruption
     if gIm.shape != (21831, 2048) or pIm.shape != (21831, 2050):
         logger.error('Image dim doesn\'t match. Excepted for pIm:{} gIm:{}; but got pIm:{}, gIm:{}. Skip.'.format((21831, 2050), (21831, 2048), pIm.shape, gIm.shape))
         os.remove(ply_data_path)
         return -3
+    
     # bety query
     cc = CC(useSubplot=True)
     logger.info('bety query start.')
     cc.bety_query(json_info['date'].strftime('%Y-%m-%d'), useSubplot=True)
-    # print(json_info['date'].strftime('%Y-%m-%d'))
     logger.info('bety query complete.')
     
     # align pointcloud 
-    # print('aligning pcloud')
     ply_xyz_map = utils.ply2xyz(ply_data, pIm, gIm)
     ply_depth = np.dstack([pIm[:, 2:], ply_xyz_map])
-    # print('aligned pcloud')
+    
     # crop
     if json_info['scan_direction']:
         vertical_top_list = np.array(list(range(0, 21830-770, 770)))
@@ -200,8 +175,7 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     ply_depth_slice_list = []
     for vertical_top in vertical_top_list:
         ply_depth_slice_list.append(ply_depth[vertical_top: vertical_top+770, :, :])
-        # plt.imshow(ply_depth[vertical_top: vertical_top+770, :, 0])
-        # plt.show()
+        
     # get plot id w/ module terra_common
     plot_id_list = []
     for vertical_top in vertical_top_list:
@@ -213,6 +187,7 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
                                       json_info['fov'], json_info['scan_distance'], 
                                       pIm.shape[1], pIm.shape[0])
         plot_id_list.append(plot_id)
+        
     # for each plot
     leaf_len_list = []
     for ply_depth_slice in ply_depth_slice_list:
@@ -238,10 +213,9 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
             id_mask, id_xyz, id_crop_pos = crop_mask_by_id(cc_mask, ply_depth_slice, i)
             contours = measure.find_contours(~id_mask.astype(bool), 0)
             approx_contours = [measure.approximate_polygon(contour, .05 * utils.contour_length(contour)) for contour in contours]
-            # print('len of approx contour:', len(approx_contours[0]))
             leaf_len = midvein_finder.leaf_length(id_mask, id_xyz, approx_contours[0])
             plot_leaf_len_list.append(leaf_len)
-        # print(plot_leaf_len_list)
+            
         # average mid 1/2 data
         avg_leaf_len = stats.trim_mean(plot_leaf_len_list, 0.25)
         # print(avg_leaf_len)
@@ -249,14 +223,10 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     leaf_len_dict = {}
     leaf_len_dict['leaf_len'] = leaf_len_list
     leaf_len_dict['plot_id'] = plot_id_list
-    # print(os.path.join(LEAF_LEN_RESULT_PATH, 
-    #                    foldername+'.pkl'))
+    # write one scan into a file
     with open(pkl_file_path, 'wb') as pickle_f:
         pickle.dump(leaf_len_dict, pickle_f)
+    # remove the tmp ply file
     os.remove(ply_data_path)
     logger.info('finished')
     return 0
-    # with open('debug.pkl', 'wb') as pickle_f:
-    #     pickle.dump(ply_depth_slice, pickle_f)
-    # write one scan into a file
-    # remove the tmp ply file
