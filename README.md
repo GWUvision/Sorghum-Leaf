@@ -8,6 +8,7 @@ opencv
 networkx
 globus_sdk
 gdal
+utm
 ```
 usage: run-pipeline [-h] --raw-path RAW_PATH --ply-path PLY_PATH -o
                     OUTPUT_PATH --start START --end END [--no-download]
