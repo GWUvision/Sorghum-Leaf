@@ -72,7 +72,7 @@ def ply2xyz(ply_data, pIm, gIm):
     
     ori_shape = gIm.shape
     total_points_ply = ply_data.elements[0].data['x'].shape[0]
-    true_idx = np.where((pIm_aligned.ravel() != 0) & (gIm.ravel() > 32))
+    true_idx = np.where((pIm_aligned.ravel() != 0) & (gIm.ravel() > 32))[0]
     if true_idx.shape[0] != ply_data['vertex'].count:
         raise Exception('Number of point from ply data does not match with calculated by raw data!')
     x_im = np.zeros(ori_shape).ravel()
@@ -131,12 +131,13 @@ def get_json_info(json_data, sensor='east'):
     return json_info
 
 
-def depth_crop_position(xyz_map, cc):
+def depth_crop_position(xyz_map, cc, xyzd=False):
     """Using the corresponding xyz_map to determine the plot crop position.
     Parameters
     ----------
     xyz_map: nparray
         corresponding gantry coordinates of the pixels on the image, the dim should be m*n*3
+        if xyzd is True, then m*n*4
     cc: CoordinateConverter
         plot boundary class
     Returns
@@ -144,7 +145,7 @@ def depth_crop_position(xyz_map, cc):
     crop_positions: list
         vertical indices of top of each plot cropping
     """
-	# add offsets when reading data
+    # add offsets when reading data
     im_height, im_width, _ = xyz_map.shape
     line_plot_num = np.zeros(im_height)
     y_map = xyz_map[:,:,1].copy()
@@ -157,7 +158,7 @@ def depth_crop_position(xyz_map, cc):
     for i in range(im_height):
         pixel_x = int(im_width / 2)
         pixel_y = i
-        #print([pixel_x, pixel_y],'-',[gantry_x, gantry_y])
+        # print([pixel_x, pixel_y],'-',[gantry_x, gantry_y])
         if y_line_mean[i] is np.nan or x_line_mean[i] is np.nan:
             if i == 0:
                 continue
