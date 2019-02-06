@@ -1,0 +1,94 @@
+#! /usr/bin/env python
+
+import os
+import sys
+import time
+import logging
+import argparse
+from connected_component_pipeline import run_analysis
+from multiprocessing import Pool
+from datetime import datetime
+
+def parse_args():
+    description = 'usage '
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('--raw-path', help='path to the root of raw data', required=True)
+    parser.add_argument('--ply-path', help='path to the root of ply data', required=True)
+    parser.add_argument('-o', '--output-path', help='yyyy-mm-dd', required=True)
+    parser.add_argument('--start', help='Start date. Format: yyyy-mm-dd', required=True)
+    parser.add_argument('--end', help='End date. Format: yyyy-mm-dd', required=True)
+    parser.add_argument('--no-download', help='no download ply files from globus', action='store_true')
+    parser.add_argument('--scanner', help='from which scanner', choices=['east', 'west', 'both'], default='east')
+    parser.add_argument('--crop', help='by plot or by leaf', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-p', '--processes', help='number of sub-processes', default=8, type=int)
+    args = parser.parse_args()
+    return args
+
+
+args = parse_args()
+logger = logging.getLogger('season_4_leaf_len_ppln_main')
+logger.setLevel(logging.INFO)
+if args.verbose:
+    logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+if args.verbose:
+    ch.setLevel(logging.DEBUG)
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+logger.info('\n\t raw data path: {}'
+            '\n\t ply data path: {} '
+            '\n\t output path: {} '
+            '\n\t start date: {}'
+            '\n\t end date: {}'
+            '\n\t scanner: {}'
+            '\n\t crop: {}'
+            '\n\t download from globus: {}'
+            '\n\t number of processes: {}'
+            .format(args.raw_path, args.ply_path, args.output_path, args.start, args.end, args.scanner, args.crop,
+                    not args.no_download, args.processes))
+
+start_date = datetime.strptime(args.start, '%Y-%m-%d')
+end_date = datetime.strptime(args.end, '%Y-%m-%d')
+
+# TODO check folder existence
+logger.info('scanning folders')
+if args.verbose:
+    task_log_lv = logging.DEBUG
+else:
+    task_log_lv = logging.INFO
+task_list = []
+for date_folder in os.listdir(args.raw_path):
+    folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
+    if folder_date < start_date or folder_date > end_date:
+        continue
+    raw_date_folder_path = os.path.join(args.raw_path, date_folder)
+    ply_date_folder_path = os.path.join(args.ply_path, date_folder)
+    for sub_folder in os.listdir(raw_date_folder_path):
+        # task format: raw_data_folder, ply_data_folder, output_folder,
+        #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
+        task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
+        task_ply_path = os.path.join(ply_date_folder_path, sub_folder)
+        download_ply = not args.no_download
+        if args.scanner == 'both':
+            task_east = (task_raw_path, task_ply_path, args.output_path, 'east', download_ply, args.crop, task_log_lv)
+            task_west = (task_raw_path, task_ply_path, args.output_path, 'west', download_ply, args.crop, task_log_lv)
+            task_list.append(task_east)
+            task_list.append(task_west)
+        else:
+            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv)
+            task_list.append(task)
+total_tasks = len(task_list)
+logger.info('total task: {}'.format(total_tasks))
+pool = Pool(processes=args.processes)
+count = 0
+start_time = datetime.datetime.now()
+rs = pool.starmap_async(run_analysis, task_list)
+while (True):
+    if rs.ready():
+        break
+    remaining = rs._number_left
+    logger.info('remain/total: {}/{}'.format(remaining, total_tasks))
+    time.sleep(60 * 5)
