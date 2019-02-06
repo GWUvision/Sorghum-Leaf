@@ -9,6 +9,7 @@ from scipy import stats
 import numpy as np
 from plyfile import PlyData
 import midvein_finder
+from midvein_finder import SorghumLeafMeasure
 import matplotlib.pyplot as plt
 import multiprocessing
 
@@ -22,6 +23,7 @@ def options():
     args = parser.parse_args()
     return args
 
+
 def connected_compoent(image, gradient_threshold=10):
     '''
     if the upper and lower bound is not given, throw the regions that  pixel count from top and bottom 1/4
@@ -33,6 +35,7 @@ def connected_compoent(image, gradient_threshold=10):
     all_labels = measure.label(edge, connectivity=1)
     label_img = np.zeros(all_labels.shape)
     return all_labels
+
 
 def get_pc_data_from_globus(folder_name, logger, sensor_name='east'):
     '''
@@ -63,6 +66,7 @@ def get_pc_data_from_globus(folder_name, logger, sensor_name='east'):
           .format(folder_name, response['task_id']))
     return t.get_task(response['task_id'])
 
+
 def crop_mask_by_id(mask, xyz_map, mask_id):
     mask = mask==mask_id
     mask = mask.astype(int)
@@ -73,7 +77,7 @@ def crop_mask_by_id(mask, xyz_map, mask_id):
     cropped_xyz_map = xyz_map.copy()
     cropped_xyz_map = cropped_xyz_map[:,~np.all(mask == 0, axis=0),:]
     cropped_xyz_map = cropped_xyz_map[~np.all(mask == 0, axis=1), :, :]
-    # and 1 pixel boader
+    # and 1 pixel boarder
     cropped_mask = np.pad(cropped_mask, [(1, 1), (1, 1)], mode='constant')
     cropped_xyz_map = np.asarray([np.pad(xyz, [(1, 1), (1, 1)], mode='edge') for xyz in cropped_xyz_map.transpose(2,0,1)])
     cropped_xyz_map = cropped_xyz_map.transpose(1,2,0)
@@ -81,19 +85,40 @@ def crop_mask_by_id(mask, xyz_map, mask_id):
                        [np.where(~np.all(mask == 0, axis=0))[0][0],np.where(~np.all(mask == 0, axis=0))[0][-1]]]
     return cropped_mask, cropped_xyz_map, cropped_position
 
-def find_leaves(xyz_map):
-    pass
 
-    
-def run_analysis(datafolder, log_lv=logging.DEBUG):
+def find_leaves(ply_depth_map):
+    # downsampling
+    ply_depth_map = ply_depth_map[::4, ::4, :]
+    # connected component
+    cc_mask = connected_compoent(ply_depth_map[:,:,1:])
+    cc_mask = np.nan_to_num(cc_mask).astype(int)
+    # heuristic search leaves that ellipse major > 3 * minor
+    reg_props = measure.regionprops(cc_mask)
+    good_leaves_id_list = []
+    for reg_prop in reg_props:
+        if reg_prop.major_axis_length < 4 * reg_prop.minor_axis_length:
+            continue
+        good_leaves_id_list.append(reg_prop.label)
+    mask_list = []
+    xyzd_list = []
+    crop_position_list = []
+    for i in good_leaves_id_list:
+        id_mask, id_xyzd, id_crop_pos = crop_mask_by_id(cc_mask, ply_depth_map, i)
+        mask_list.append(id_mask)
+        xyzd_list.append(id_xyzd)
+        crop_position_list.append(id_crop_pos)
+    return mask_list, xyzd_list, crop_position_list
+
+
+def run_analysis(data_folder, log_lv=logging.DEBUG, per_plot=True):
     # TODO better logging
-    datafolder = os.path.join(datafolder, '')
-    foldername = os.path.basename(os.path.dirname(datafolder))
-    pkl_file_path = os.path.join(LEAF_LEN_RESULT_PATH,foldername+'.pkl')
+    data_folder = os.path.join(data_folder, '')
+    folder_name = os.path.basename(os.path.dirname(data_folder))
+    pkl_file_path = os.path.join(LEAF_LEN_RESULT_PATH,folder_name+'.pkl')
     cpname = multiprocessing.current_process().name
     
     # Logger
-    logger = logging.getLogger('ppln_'+foldername+'_'+cpname)
+    logger = logging.getLogger('ppln_'+folder_name+'_'+cpname)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s:\t%(message)s')
     ch = logging.StreamHandler()
@@ -115,7 +140,7 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
             
     # Get data
     # Get .png
-    filename_list = os.listdir(datafolder)
+    filename_list = os.listdir(data_folder)
     for filename in filename_list:
         if 'east_0_g.png' in filename:
             gIm_name = filename
@@ -124,36 +149,36 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
         if 'metadata.json' in filename:
             json_name = filename
     try:
-        gIm = sio.imread(os.path.join(datafolder, gIm_name))
-        pIm = sio.imread(os.path.join(datafolder, pIm_name))
+        gIm = sio.imread(os.path.join(data_folder, gIm_name))
+        pIm = sio.imread(os.path.join(data_folder, pIm_name))
     except:
         logger.error('Image reading error! Skip.')
         return -1
     # Get .ply
-    if not os.path.isfile(os.path.expanduser(os.path.join(PC_TEMP_PATH, foldername+'.ply'))):
+    if not os.path.isfile(os.path.expanduser(os.path.join(PC_TEMP_PATH, folder_name+'.ply'))):
         try:
-            get_pc_data_from_globus(foldername, logger)
+            get_pc_data_from_globus(folder_name, logger)
         except:
             tb = traceback.format_exc()
             logger.error('Download from globus error!\n'+tb)
             return -2
-    ply_data_path = os.path.expanduser(os.path.join(PC_TEMP_PATH, foldername+'.ply'))
+    ply_data_path = os.path.expanduser(os.path.join(PC_TEMP_PATH, folder_name+'.ply'))
     try:
         ply_data = PlyData.read(ply_data_path)
-    except Exception as e :
-        logger.error('ply file reading error! Skip.'.format(foldername+'.ply'))
+    except Exception as e:
+        logger.error('ply file reading error! Skip.'.format(folder_name+'.ply'))
         os.remove(ply_data_path)
         return -1
     # Read json file
     try:
-        with open(os.path.join(datafolder, json_name), 'r') as json_f:
+        with open(os.path.join(data_folder, json_name), 'r') as json_f:
             json_data = json.load(json_f)
         json_info = utils.get_json_info(json_data)
     except Exception as e:
-        logger.error('Load json unsuccessed.')
+        logger.error('Load json unsuccessful.')
         return -4
     if gIm.shape != (21831, 2048) or pIm.shape != (21831, 2050):
-        logger.error('Image dim doesn\'t match. Excepted for pIm:{} gIm:{}; but got pIm:{}, gIm:{}. Skip.'.format((21831, 2050), (21831, 2048), pIm.shape, gIm.shape))
+        logger.error('Image dim does not match. Excepted for pIm:{} gIm:{}; but got pIm:{}, gIm:{}. Skip.'.format((21831, 2050), (21831, 2048), pIm.shape, gIm.shape))
         os.remove(ply_data_path)
         return -3
     
@@ -166,15 +191,18 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
     # align pointcloud 
     ply_xyz_map = utils.ply2xyz(ply_data, pIm, gIm)
     ply_depth = np.dstack([pIm[:, 2:], ply_xyz_map])
-    
+
+    if not per_plot:
+        pass
+
     # crop
     if json_info['scan_direction']:
         vertical_top_list = np.array(list(range(0, 21830-770, 770)))
     else:
         vertical_top_list = np.array(list(range(360-320, 21830-770, 770)))
-    ply_depth_slice_list = []
+    xyzd_slice_list = []
     for vertical_top in vertical_top_list:
-        ply_depth_slice_list.append(ply_depth[vertical_top: vertical_top+770, :, :])
+        xyzd_slice_list.append(ply_depth[vertical_top: vertical_top+770, :, :])
         
     # get plot id w/ module terra_common
     plot_id_list = []
@@ -189,44 +217,31 @@ def run_analysis(datafolder, log_lv=logging.DEBUG):
         plot_id_list.append(plot_id)
         
     # for each plot
-    leaf_len_list = []
-    for ply_depth_slice in ply_depth_slice_list:
-        # downsampling
-        ply_depth_slice = ply_depth_slice[::4, ::4, :]
-        # connected component
-        cc_mask = connected_compoent(ply_depth_slice[:,:,1:])
-        cc_mask = np.nan_to_num(cc_mask).astype(int)
-        # heuristic search leaves that ellipse major > 3 * minor
-        reg_props = measure.regionprops(cc_mask)
-        good_leaves_id_list = []
-        for reg_prop in reg_props:
-            if reg_prop.major_axis_length < 4 * reg_prop.minor_axis_length:
-                continue
-            good_leaves_id_list.append(reg_prop.label)
-        # print('good leaves: {}/{}'.format(len(good_leaves_id_list), len(reg_props)))
-        # for each component, calc max shortest path
-        plot_leaf_len_list = []
-        with open('debug.pkl', 'wb') as pickle_f:
-            pickle.dump([cc_mask, ply_depth_slice], pickle_f)
-        # for i in range(1, cc_mask.max()+1):
-        for i in good_leaves_id_list:
-            id_mask, id_xyz, id_crop_pos = crop_mask_by_id(cc_mask, ply_depth_slice, i)
-            contours = measure.find_contours(~id_mask.astype(bool), 0)
-            approx_contours = [measure.approximate_polygon(contour, .05 * utils.contour_length(contour)) for contour in contours]
-            leaf_len = midvein_finder.leaf_length(id_mask, id_xyz, approx_contours[0])
-            plot_leaf_len_list.append(leaf_len)
+    leaf_length_list = []
+    leaf_width_list = []
+    for xyzd_slice in xyzd_slice_list:
+        mask_list, xyzd_list, crop_position_list = find_leaves(xyzd_slice)
+        plot_leaf_length_list = []
+        plot_leaf_width_list = []
+        for leaf_mask, leaf_xyzd, leaf_crop_pos in zip(mask_list, xyzd_list, crop_position_list):
+            slm = SorghumLeafMeasure(leaf_mask, leaf_xyzd[:, :, :3])
+            slm.calc_leaf_length()
+            slm.calc_leaf_width()
+            plot_leaf_length_list.append(slm.leaf_len)
+            plot_leaf_width_list.append(slm.leaf_len)
             
         # average mid 1/2 data
-        avg_leaf_len = stats.trim_mean(plot_leaf_len_list, 0.25)
+        avg_leaf_length = stats.trim_mean(plot_leaf_length_list, 0.25)
+        avg_leaf_width = stats.trim_mean(plot_leaf_width_list, 0.25)
         # print(avg_leaf_len)
-        leaf_len_list.append(avg_leaf_len)
+        leaf_length_list.append(avg_leaf_length)
+        leaf_width_list.append(avg_leaf_width)
     leaf_len_dict = {}
-    leaf_len_dict['leaf_len'] = leaf_len_list
+    leaf_len_dict['leaf_length'] = leaf_length_list
+    leaf_len_dict['leaf_width'] = leaf_length_list
     leaf_len_dict['plot_id'] = plot_id_list
     # write one scan into a file
     with open(pkl_file_path, 'wb') as pickle_f:
         pickle.dump(leaf_len_dict, pickle_f)
-    # remove the tmp ply file
-    os.remove(ply_data_path)
     logger.info('finished')
     return 0
