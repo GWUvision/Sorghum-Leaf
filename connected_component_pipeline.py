@@ -8,9 +8,7 @@ from skimage import measure
 from scipy import stats
 import numpy as np
 from plyfile import PlyData
-import midvein_finder
 from midvein_finder import SorghumLeafMeasure
-import matplotlib.pyplot as plt
 import multiprocessing
 from timeit import default_timer as timer
 
