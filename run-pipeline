@@ -9,7 +9,9 @@ from connected_component_pipeline import run_analysis
 from multiprocessing import Pool
 from datetime import datetime
 
+
 def parse_args():
+    # TODO　add arg for globus refresh token
     description = 'usage '
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--raw-path', help='path to the root of raw data', required=True)
@@ -84,7 +86,6 @@ total_tasks = len(task_list)
 logger.info('total task: {}'.format(total_tasks))
 pool = Pool(processes=args.processes)
 count = 0
-start_time = datetime.datetime.now()
 rs = pool.starmap_async(run_analysis, task_list)
 while (True):
     if rs.ready():
