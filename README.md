@@ -1,9 +1,8 @@
 # Sorghum-Leaf
+```
 usage: run-pipeline [-h] --raw-path RAW_PATH --ply-path PLY_PATH -o
                     OUTPUT_PATH --start START --end END [--no-download]
-                    [--scanner {east,west,both}] [--crop] [-v] [-p PROCESSES]
-
-usage
+                    [--scanner {east,west,both}] [--crop] [-v] [-p PROCESSES]                   
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -20,3 +19,4 @@ optional arguments:
   -v, --verbose
   -p PROCESSES, --processes PROCESSES
                         number of sub-processes
+```
