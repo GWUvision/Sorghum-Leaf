@@ -4,3 +4,6 @@
 # ipynb
 .ipynb_checkpoints
 *.ipynb
+
+# log files
+*.log
