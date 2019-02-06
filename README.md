@@ -3,8 +3,8 @@ Requirements:
 
 numpy
 scipy
-skimage
-cv2
+scikit-image
+opencv
 networkx
 globus_sdk
 gdal
