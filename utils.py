@@ -15,7 +15,8 @@ def crop_rect(image, rect_coord):
     elif len(image.shape) == 2:
         [h, w] = image.shape
     else:
-        print('wrong dim for image in crop_rect()')
+        pass
+        # print('wrong dim for image in crop_rect()')
     if rect_coord[0] < 0:
         rect_coord[0] = 0
     if rect_coord[1] < 0:
@@ -232,7 +233,7 @@ def heuristic_search_leaf(regions_mask, point_cloud_z):
     label_id_list = []
     regions = regionprops(regions_mask.astype(int), point_cloud_z, coordinates='rc')
     pixel_count_list = [props.area for props in regions if props.mean_intensity!=0 ]
-    print(len(pixel_count_list))
+    # print(len(pixel_count_list))
     pixel_count_list = list(filter(lambda x: x > 20, pixel_count_list))
     trimmed_pixel_count_list = stats.mstats.trim(pixel_count_list, (0.5, 0.05), relative=True).compressed()
     area_lower = min(trimmed_pixel_count_list)
