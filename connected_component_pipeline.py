@@ -1,7 +1,7 @@
 from globus_data_transfer import Transfer
 from datetime import date, timedelta
 from terra_common import CoordinateConverter as CC
-import os, logging, traceback, time, utils, json, argparse, shutil
+import os, logging, traceback, time, utils, json, argparse, shutil, math
 import skimage.io as sio
 import pickle
 from skimage import measure
@@ -102,8 +102,8 @@ def crop_mask_by_rect(mask, xyz_map, mask_id, rect, downsample=False):
     cropped_xyz_map = cropped_xyz_map[:, ~np.all(cropped_mask == 0, axis=0), :]
     cropped_xyz_map = cropped_xyz_map[~np.all(cropped_mask == 0, axis=1), :, :]
     w, h = cropped_mask.shape
-    if downsample and max(w, h) > 200:
-        ds_ratio = int(max(w, h)/100)
+    if downsample and max(w, h) > 100:
+        ds_ratio = math.ceil(max(w, h)/100)
         cropped_mask = cropped_mask[::ds_ratio, ::ds_ratio]
         cropped_xyz_map = cropped_xyz_map[::ds_ratio, ::ds_ratio, :]
     # and 1 pixel boarder
@@ -279,7 +279,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
         plot_leaf_width_list = []
         for leaf_mask, leaf_dxyz in zip(mask_list, dxyz_list):
             leaf_start = timer()
-            slm = SorghumLeafMeasure(leaf_mask, leaf_dxyz[:, :, 1:], max_neibor_pixel=5, downsample=True)
+            slm = SorghumLeafMeasure(leaf_mask, leaf_dxyz[:, :, 1:], max_neibor_pixel=3, downsample=True)
             leaf_length_start = timer()
             slm.calc_leaf_length()
             leaf_width_start = timer()
@@ -304,7 +304,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
         logger.debug('slice processing total time elapsed: {0:.3f}s'.format(slice_end - slice_start))
     leaf_len_dict = {}
     leaf_len_dict['leaf_length'] = leaf_length_list
-    leaf_len_dict['leaf_width'] = leaf_length_list
+    leaf_len_dict['leaf_width'] = leaf_width_list
     leaf_len_dict['plot_id'] = plot_id_list
     # write one scan into a file
     with open(pkl_file_path, 'wb') as pickle_f:
@@ -453,7 +453,14 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.info('{} leaves found, time elapsed: {}'.format(len(mask_list), leaves_finding_end - leaves_finding_start))
     logger.info('start processing leaves')
     leaves_proc_start = timer()
-    for leaf_mask, leaf_dxyz in zip(mask_list, dxyz_list):
+    # random sample to reduce the time consuming
+    if len(mask_list) > 100:
+        sampled_idx = np.random.choice(len(mask_list), 100)
+    else:
+        smapled_idx = range(len(mask_list))
+    for idx in sampled_idx:
+        leaf_mask = mask_list[idx]
+        leaf_dxyz = dxyz_list[idx]
         leaf_start = timer()
         slm = SorghumLeafMeasure(leaf_mask, leaf_dxyz[:, :, 1:], max_neibor_pixel=5, downsample=True)
         leaf_length_start = timer()
@@ -461,22 +468,24 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         leaf_width_start = timer()
         slm.calc_leaf_width()
         leaf_end = timer()
+        logger.debug('leaf_mask_shape: {}'.format(leaf_mask.shape))
+        logger.debug('leaf_edge_length: {}'.format(len(slm.leaf_edge)))
         logger.debug('leaf processing time elapsed: total {0:.3f} s\n'
-                     '\tinit: {0:.3f} s \n\tlength: {0:.3f} s \n\twidth: {0:.3f} s'
+                     '\tinit: {1:.3f} s \n\tlength: {2:.3f} s \n\twidth: {3:.3f} s'
                      .format(leaf_end - leaf_start,
                              leaf_length_start - leaf_start,
                              leaf_width_start - leaf_length_start,
                              leaf_end - leaf_width_start))
         h, w, d = leaf_dxyz.shape
-        plot_row, plot_col = cc.fieldPosition_to_fieldPartition(leaf_dxyz[int(h/2), int(w/2), 0] * 0.001, leaf_dxyz[int(h/2), int(w/2), 1] * 0.001)
+        plot_row, plot_col = cc.fieldPosition_to_fieldPartition(leaf_dxyz[int(h/2), int(w/2), 1] * 0.001, leaf_dxyz[int(h/2), int(w/2), 2] * 0.001)
         leaf_length_list.append(slm.leaf_len)
-        leaf_width_list.append(slm.leaf_len)
+        leaf_width_list.append(slm.leaf_width)
         leaf_cr_list.append((plot_col, plot_row))
     leaves_proc_end = timer()
     logger.info('Leaves processed. Time elapsed:{} s'.format(leaves_proc_end - leaves_proc_start))
     leaf_len_dict = {}
     leaf_len_dict['leaf_length'] = leaf_length_list
-    leaf_len_dict['leaf_width'] = leaf_length_list
+    leaf_len_dict['leaf_width'] = leaf_width_list
     leaf_len_dict['col_range'] = leaf_cr_list
     logger.info('writing into file.')
     with open(pkl_file_path, 'wb') as pickle_f:
