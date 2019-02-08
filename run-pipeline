@@ -5,7 +5,7 @@ import sys
 import time
 import logging
 import argparse
-from connected_component_pipeline import run_analysis
+from connected_component_pipeline import run_analysis, run_analysis_strip
 from multiprocessing import Pool
 from datetime import datetime
 
@@ -86,7 +86,10 @@ total_tasks = len(task_list)
 logger.info('total task: {}'.format(total_tasks))
 pool = Pool(processes=args.processes)
 count = 0
-rs = pool.starmap_async(run_analysis, task_list)
+if args.crop:
+    rs = pool.starmap_async(run_analysis, task_list)
+else:
+    rs = pool.starmap_async(run_analysis_strip, task_list)
 while (True):
     if rs.ready():
         break

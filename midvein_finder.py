@@ -16,6 +16,7 @@ def limited_pairs_longest_shortest_path_length(graph, nodes_list):
                 max_length_path = shortest_path
     return max_length_path, max_length
 
+
 def mask2contour(mask, approx_factor=0.0, longest_contour_only=False):
     """Find the outlines of the mask. If the approx_factor is not 0.0, it will return approximated
     with the step length by approx_factor*total_length
@@ -27,10 +28,12 @@ def mask2contour(mask, approx_factor=0.0, longest_contour_only=False):
         return contours[np.argmax(list(map(len, contours)))]
     else:
         return contours
-    
+
+
 class SorghumLeafMeasure: 
     # TODO add a method to get edge_point_list
-    def __init__(self, mask, xyz_map, max_neibor_pixel=10):
+    # TODO add a option to down sample the image
+    def __init__(self, mask, xyz_map, max_neibor_pixel=5, downsample=False):
         self.mask = mask
         self.xyz_map = xyz_map
         self.max_neibor_pixel = max_neibor_pixel
@@ -83,6 +86,17 @@ class SorghumLeafMeasure:
     def calc_leaf_length(self):
         self.leaf_len_path, self.leaf_len = limited_pairs_longest_shortest_path_length(self.leaf_graph, self.leaf_edge_approx)
         return self.leaf_len
+
+    def split_leaf_edge(self):
+        endpoint_0 = self.leaf_len_path[0]
+        endpoint_1 = self.leaf_len_path[-1]
+        endpoint_0_idx = np.where((self.leaf_edge == endpoint_0).all(axis=1))[0][0]
+        endpoint_1_idx = np.where((self.leaf_edge == endpoint_1).all(axis=1))[0][0]
+        side_0_start = min(endpoint_0_idx, endpoint_1_idx)
+        side_0_end = max(endpoint_0_idx, endpoint_1_idx)
+        self.side_0 = self.leaf_edge[side_0_start:side_0_end]
+        self.side_1 = np.concatenate([self.leaf_edge[side_0_end:-1], self.leaf_edge[:side_0_start]])
+        return self.side_0, self.side_1
     
     def calc_leaf_width(self, split_n=5):
         # get points of n-section
@@ -110,6 +124,14 @@ class SorghumLeafMeasure:
         aux_edges = []
         for edge_point in self.leaf_edge:
             aux_edges.append(('aux_point', tuple(edge_point)))
+        ###############
+        aux_edges_side_0 = []
+        aux_edges_side_1 = []
+        side_0, side_1 = self.split_leaf_edge()
+        for edge_point in side_0:
+            aux_edges_side_0.append(('aux_point', tuple(edge_point)))
+        for edge_point in side_1:
+            aux_edges_side_1.append(('aux_point', tuple(edge_point)))
         n_section_leaf_width_list = []
         n_section_leaf_width_path_list = []
         for n_section_point in n_section_points_list:
@@ -123,25 +145,36 @@ class SorghumLeafMeasure:
             
             temp_graph = self.leaf_graph.copy()
             temp_graph.add_node('aux_point')
-            temp_graph.add_edges_from(aux_edges)
+            temp_graph.add_edges_from(aux_edges_side_0)
             aux_shortest_path = nx.dijkstra_path(temp_graph, tuple(n_section_point), 'aux_point')
-            nearest_point_on_edge = np.array(aux_shortest_path[-2])
-            # remove vectors at same side
-            point_cosine = np.dot(nearest_point_on_edge - n_section_point, (self.leaf_edge - n_section_point).T)/(np.linalg.norm(self.leaf_edge)* np.linalg.norm(n_section_point))
-            self._point_dot_prod = point_cosine
-            same_side_points = list(map(tuple, self.leaf_edge[np.where(point_cosine>0)]))
-            self._same_side_points = np.array(same_side_points)
-            temp_graph.remove_nodes_from(same_side_points)
-            # find the nearest point for another sid
-            aux_other_side_shortest_path = nx.dijkstra_path(temp_graph, tuple(n_section_point), 'aux_point')
-            nearest_point_on_edge_other_side = np.array(aux_other_side_shortest_path[-2])
-            # add two up
+            nearest_point_on_edge_0 = np.array(aux_shortest_path[-2])
+            temp_graph.remove_edges_from(aux_edges_side_0)
+            temp_graph.add_edges_from(aux_edges_side_1)
+            aux_shortest_path = nx.dijkstra_path(temp_graph, tuple(n_section_point), 'aux_point')
+            temp_graph.remove_edges_from(aux_edges_side_1)
+            nearest_point_on_edge_1 = np.array(aux_shortest_path[-2])
             leaf_width_path = nx.dijkstra_path(self.leaf_graph,
-                                               tuple(nearest_point_on_edge),
-                                               tuple(nearest_point_on_edge_other_side))
+                                               tuple(nearest_point_on_edge_0),
+                                               tuple(nearest_point_on_edge_1))
             leaf_width = nx.dijkstra_path_length(self.leaf_graph,
-                                                 tuple(nearest_point_on_edge),
-                                                 tuple(nearest_point_on_edge_other_side))
+                                                 tuple(nearest_point_on_edge_0),
+                                                 tuple(nearest_point_on_edge_1))
+            # remove vectors at same side
+            # point_cosine = np.dot(nearest_point_on_edge - n_section_point, (self.leaf_edge - n_section_point).T)/(np.linalg.norm(self.leaf_edge)* np.linalg.norm(n_section_point))
+            # self._point_dot_prod = point_cosine
+            # same_side_points = list(map(tuple, self.leaf_edge[np.where(point_cosine>0)]))
+            # self._same_side_points = np.array(same_side_points)
+            # temp_graph.remove_nodes_from(same_side_points)
+            # find the nearest point for another sid
+            # aux_other_side_shortest_path = nx.dijkstra_path(temp_graph, tuple(n_section_point), 'aux_point')
+            # nearest_point_on_edge_other_side = np.array(aux_other_side_shortest_path[-2])
+            # add two up
+            # leaf_width_path = nx.dijkstra_path(self.leaf_graph,
+            #                                    tuple(nearest_point_on_edge),
+            #                                    tuple(nearest_point_on_edge_other_side))
+            # leaf_width = nx.dijkstra_path_length(self.leaf_graph,
+            #                                      tuple(nearest_point_on_edge),
+            #                                      tuple(nearest_point_on_edge_other_side))
             n_section_leaf_width_list.append(leaf_width)
             n_section_leaf_width_path_list.append(leaf_width_path)
         if len(n_section_leaf_width_path_list) == 0: 
@@ -150,4 +183,3 @@ class SorghumLeafMeasure:
         self.leaf_width = n_section_leaf_width_list[max_idx]
         self.leaf_width_path = n_section_leaf_width_path_list[max_idx]
         return self.leaf_width
-        

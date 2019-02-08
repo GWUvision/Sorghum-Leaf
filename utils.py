@@ -212,30 +212,35 @@ def ply_offset(ply_data, json_info):
     ply_data['vertex']['z'] = ply_data['vertex']['z'] + 3445 - json_info['scanner_position_origin'][2]*1000 + 350
     return ply_data
 
-def heuristic_search_leaf(regions_mask, point_cloud_z):
-    """ heuristic serach valid leaves from the region mask 
+
+def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_lower=0.5, pixel_upper=0.05):
+    """ heuristic serach valid leaves from the region mask
     Parameters
     ----------
     regions_mask: ndarray
         candidate regions for finding leaves
     point_cloud_z: ndarray
         pixel height in mm under gantry coordination
-    
+    ratio_threshold: int
+        ratio threshold of major axis and minor axis
+    pixel_lower: float
+        relative lower bound of pixel count
+    pixel_upper: float
+        relative upper bound of pixel count
+
     Returns
     -------
-    filtered_leaves: list
-        list of small crops of vaild leaves
     leaves_bbox: list
-        list of crops position, formated as [min_row, min_col, max_row, max_col]
+        list of crops position, formatted as [min_row, min_col, max_row, max_col]
     """
-    filtered_leaves = []
     leaves_bbox = []
     label_id_list = []
     regions = regionprops(regions_mask.astype(int), point_cloud_z, coordinates='rc')
-    pixel_count_list = [props.area for props in regions if props.mean_intensity!=0 ]
+    pixel_count_list = [props.area for props in regions if props.mean_intensity != 0]
     # print(len(pixel_count_list))
     pixel_count_list = list(filter(lambda x: x > 20, pixel_count_list))
-    trimmed_pixel_count_list = stats.mstats.trim(pixel_count_list, (0.5, 0.05), relative=True).compressed()
+    trimmed_pixel_count_list = stats.mstats.trim(pixel_count_list, (pixel_lower, pixel_upper),
+                                                 relative=True).compressed()
     area_lower = min(trimmed_pixel_count_list)
     area_upper = max(trimmed_pixel_count_list)
     for props in regions:
@@ -243,19 +248,17 @@ def heuristic_search_leaf(regions_mask, point_cloud_z):
         good_pixel_count = np.count_nonzero(props.intensity_image)
         if props.mean_intensity == 0:
             continue
-        if good_pixel_count/props.area < .99:
+        if good_pixel_count / props.area < .99:
             continue
         y0, x0 = props.centroid
         yw, xw = props.weighted_centroid
         orientation = props.orientation
-        if props.major_axis_length < 4 * props.minor_axis_length or props.area > area_upper or props.area < area_lower:
+        if props.major_axis_length < ratio_threshold * props.minor_axis_length or props.area > area_upper or props.area < area_lower:
             continue
-        filtered_leaves.append(props.filled_image)
-        # TODO return position of that 
         minr, minc, maxr, maxc = props.bbox
         leaves_bbox.append([minr, minc, maxr, maxc])
         label_id_list.append([props.label])
-    return filtered_leaves, leaves_bbox, label_id_list
+    return leaves_bbox, label_id_list
 
 def array_zero_to_nan(array):
     nan_array = array.copy().astype(float)
