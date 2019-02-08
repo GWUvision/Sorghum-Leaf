@@ -11,7 +11,7 @@ from datetime import datetime
 
 
 def parse_args():
-    # TODO　add arg for globus refresh token
+    # TODO add arg for globus refresh token
     description = 'usage '
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--raw-path', help='path to the root of raw data', required=True)
