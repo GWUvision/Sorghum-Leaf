@@ -245,15 +245,17 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
     area_upper = max(trimmed_pixel_count_list)
     for props in regions:
         # TODO move mean intensity check on the top combine with region area
-        good_pixel_count = np.count_nonzero(props.intensity_image)
+        if  props.area > area_upper or props.area < area_lower:
+            continue
         if props.mean_intensity == 0:
             continue
+        good_pixel_count = np.count_nonzero(props.intensity_image)
         if good_pixel_count / props.area < .99:
             continue
         y0, x0 = props.centroid
         yw, xw = props.weighted_centroid
         orientation = props.orientation
-        if props.major_axis_length < ratio_threshold * props.minor_axis_length or props.area > area_upper or props.area < area_lower:
+        if props.major_axis_length < ratio_threshold * props.minor_axis_length:
             continue
         minr, minc, maxr, maxc = props.bbox
         leaves_bbox.append([minr, minc, maxr, maxc])
