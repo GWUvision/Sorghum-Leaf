@@ -1,0 +1,76 @@
+#! /usr/bin/env python
+
+import pickle
+import os
+import csv
+import argparse
+
+def parse_args():
+    # TODO add arg for globus refresh token
+    description = 'usage '
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('-f', '--pkl-folder', help='path to the root of pkl', required=True)
+    parser.add_argument('-o', '--output-path', help='/path/to/result.csv', default='./result.csv')
+    args = parser.parse_args()
+    return args
+
+
+args = parse_args()
+
+csv_path = args.output_path
+pkl_path = os.path.join(args.pkl_folder, '')
+columns = ['local_datetime', 'leaf_length', 'leaf_width', 'access_level', 'species',
+           'site', 'citation_author', 'citation_year', 'citation_title', 'method']
+access_level = 2
+species = 'Sorghum bicolor'
+citation_author = 'Zeyu Zhang'
+citation_year = '2019'
+citation_title = ''
+method = ''
+pkl_filename_list = os.listdir(pkl_path)
+'''
+merged_dict:
+date::dict
+    |- col, range::list
+        |- leaf_length_sum
+        |- leaf_width_sum
+        |- leaf_count
+'''
+merged_dict = {}
+for r_filename in pkl_filename_list:
+    try:
+        with open(os.path.join(pkl_path, r_filename), 'rb') as f:
+            result = pickle.load(f)
+    except:
+        continue
+    leaf_date = r_filename[:10]
+    sensor_name = r_filename[-8:-4]
+    if (leaf_date, sensor_name) not in merged_dict:
+        merged_dict[(leaf_date, sensor_name)] = {}
+    for leaf_width, leaf_length, col_range in \
+            zip(result['leaf_width'], result['leaf_length'], result['col_range']):
+        if col_range not in merged_dict[(leaf_date, sensor_name)]:
+            merged_dict[(leaf_date, sensor_name)][col_range] = [0, 0, 0]
+        merged_dict[(leaf_date, sensor_name)][col_range][0] += leaf_length
+        merged_dict[(leaf_date, sensor_name)][col_range][1] += leaf_width
+        merged_dict[(leaf_date, sensor_name)][col_range][2] += 1
+
+result_list = []
+for date_sensor, date_sensor_dict in merged_dict.items():
+    for col_range, col_range_data in merged_dict[date_sensor].items():
+        row = [date_sensor[0],  # date
+               date_sensor[1],  # sensor name
+               col_range[0],       # col
+               col_range[1],
+               '{:.3f}'.format(col_range_data[0]/col_range_data[2]),  # average leaf_length
+               '{:.3f}'.format(col_range_data[1]/col_range_data[2])]  # average leaf width
+        result_list.append(row)
+
+with open(csv_path, 'w') as csvfile:
+    csv_writer = csv.writer(csvfile)
+    csv_writer.writerows(result_list)
+
+
+
+
+
