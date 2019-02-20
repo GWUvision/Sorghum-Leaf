@@ -5,5 +5,15 @@
 .ipynb_checkpoints
 *.ipynb
 
-# log files
-*.log
+# test
+test*
+
+# csv
+*.csv
+
+# emacs backup
+\#*#
+
+# pycache
+*.pyc
+__pycache__
