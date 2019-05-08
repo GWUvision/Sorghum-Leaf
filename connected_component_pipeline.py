@@ -113,20 +113,23 @@ def crop_mask_by_rect(mask, xyz_map, mask_id, rect, downsample=False):
     return cropped_mask, cropped_xyz_map
 
 
-def find_leaves(dxyz_map, pixel_lower=0.5, pixel_upper=0.05):
+def find_leaves(dxyz_map, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, downsample=True, debug=False):
     # connected component
     cc_mask = connected_component(dxyz_map[:, :, 3])
     # heuristic search leaves that ellipse major > 3 * minor
     leaf_bbox_list, label_id_list = \
         utils.heuristic_search_leaf(cc_mask, dxyz_map[:, :, 3],
-                                    ratio_threshold=2, pixel_lower=pixel_lower, pixel_upper=pixel_upper)
+                                    ratio_threshold=ratio_threshold, pixel_lower=pixel_lower, pixel_upper=pixel_upper)
     mask_list = []
     xyzd_list = []
     for leaf_id, leaf_bbox in zip(label_id_list, leaf_bbox_list):
-        id_mask, id_xyzd = crop_mask_by_rect(cc_mask, dxyz_map, leaf_id, leaf_bbox, downsample=True)
+        id_mask, id_xyzd = crop_mask_by_rect(cc_mask, dxyz_map, leaf_id, leaf_bbox, downsample=downsample)
         mask_list.append(id_mask)
         xyzd_list.append(id_xyzd)
-    return mask_list, xyzd_list
+    if debug:
+        return mask_list, xyzd_list, leaf_bbox_list
+    else:
+        return mask_list, xyzd_list
 
 
 def run_analysis(raw_data_folder, ply_data_folder, output_folder,
