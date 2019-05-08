@@ -49,6 +49,8 @@ for r_filename in pkl_filename_list:
         merged_dict[(leaf_date, sensor_name)] = {}
     for leaf_width, leaf_length, col_range in \
             zip(result['leaf_width'], result['leaf_length'], result['col_range']):
+        if leaf_width is None or leaf_length is None or col_range is None:
+            continue
         if col_range not in merged_dict[(leaf_date, sensor_name)]:
             merged_dict[(leaf_date, sensor_name)][col_range] = [0, 0, 0]
         merged_dict[(leaf_date, sensor_name)][col_range][0] += leaf_length
