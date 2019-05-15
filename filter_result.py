@@ -1,0 +1,154 @@
+import os
+import pickle
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+def kalman( x, P, m, R, motion, Q, F, H ):
+    '''
+    Parameters:
+    x: initial state
+    P: initial uncertainty convariance matrix
+    measurement: observed position ( same shape as H * x )
+    R: measurement noise ( same shape as H )
+    motion: external motion added to state vector x
+    Q: motion noise ( same shape as P )
+    F: next state function: x_prime = F * x
+    H: measurement function: position = H * x
+
+    Return: the updated and predicted new values for ( x, P )
+
+    See also http://en.wikipedia.org/wiki/Kalman_filter
+
+    This version of kalman can be applied to many different situations by
+    appropriately defining F and H 
+    '''
+    # UPDATE x, P based on measurement m    
+    # distance between measured and current position-belief
+    if np.isnan(m).any():
+        y = 0
+    else:
+        y = m - H * x
+
+
+    S = H * P * H.T + R  # residual convariance
+    K = P * H.T * S.I    # Kalman gain
+
+    x = x + K * y
+    I = np.matrix( np.eye( F.shape[0] ) ) # identity matrix
+    P = ( I - K * H ) * P
+    # PREDICT x, P based on motion
+    x = F * x + motion
+    P = F * P * F.T + Q
+    return x, P
+
+def kalman_leaf_length(day_array, measure_array, start_date=None):
+    for i in range(max(day_array)):
+        if i not in day_array:
+            day_array = np.append(day_array, i)
+            measure_array = np.append(measure_array, np.nan)
+    measure_array = measure_array[np.argsort(day_array)]
+    day_array.sort()
+    N = max(day_array)
+    x = np.matrix( '100. 5.' ).T 
+    P =  np.matrix( '''
+        1000. 0. ;
+        0. 4.''' )
+    R = 10000
+    
+    F = np.matrix( '''
+        1. 1. ;
+        0. 1. ''' )
+    H = np.matrix( '''
+        1. 0. ''' )
+    motion = np.matrix( '0. 0.' ).T
+    Q =  np.matrix( '''
+        25. 0. ;
+        0. 4. ''' )
+    m = np.matrix( '0.' ).T
+    kalman_x = np.zeros( N )
+    for n in range(N):
+        m[0] = measure_array[n]
+        x, P = kalman( x, P, m, R, motion, Q, F, H )
+        kalman_x[n] = x[0]
+    return day_array, kalman_x
+
+def leaf_data_dict_to_dataframe(data_dict):
+    result_list = []
+    for (date, sensor), plot_dict in tqdm(data_dict.items(), desc='parse dict to list'):
+        for (plot_col, plot_range), leaves_list in plot_dict.items():
+            for leaf_length, leaf_width in leaves_list:
+                result_list.append([date, sensor, plot_col, plot_range, leaf_length, leaf_width])
+    leaves_df = pd.DataFrame(result_list)
+    leaves_df.columns=['date', 'sensor', 'col', 'range', 'leaf_length', 'leaf_width']
+    leaves_df['date']=leaves_df['date'].astype('datetime64[ns]')
+    return leaves_df
+
+def subplot_col_range_to_site_str(subplot_col, subplot_range, season_num):
+    plot_range = subplot_range
+    plot_col = (subplot_col + 1) / 2
+    if (subplot_col % 2) != 0:
+        subplot = 'W'
+    else:
+        subplot = 'E'
+    site_str = 'MAC Field Scanner Season {} Range {} Column {} {}'\
+        .format(str(season_num), str(plot_range), str(plot_col), subplot)
+    return site_str
+
+if __name__ == '__main__':
+    data_file_path = './leaves.pkl'
+    season_num = 4
+    pkl_save_folder = './s4_pkl_result'
+    # read data
+    with open(data_file_path, 'rb') as f:
+        leaves_dict = pickle.load(f)
+    leaves_df = leaf_data_dict_to_dataframe(leaves_dict)
+    # remove NaN
+    leaves_df = leaves_df.dropna()
+    col_range = np.unique(leaves_df[['col', 'range']].values, axis=0)
+    # remove row with zeros
+    col_range = col_range[np.all(col_range!=0, axis=1), :]
+    all_plot_result_df = pd.DataFrame()
+    for plot_col, plot_range in tqdm(col_range, desc='kalman filtering'):
+        # select plot
+        selected_plot_df = leaves_df[(leaves_df['col']==plot_col) & (leaves_df['range']==plot_range)]
+        # TODO could move two filter out of for loop for better readiability 
+        # filtered if only few days have data
+        if len(selected_plot_df['date'].unique()) < 15:
+            continue
+        # filter days with few data points 
+        selected_plot_df = selected_plot_df.groupby(['date', 'sensor', 'col', 'range'])\
+            .filter(lambda x: x['leaf_length'].count() > 10)
+        # mean by average all (west east together)
+        selected_plot_df = selected_plot_df.groupby(['date']).mean().reset_index()
+        # transfer the data into discrete time_array, measure_array format
+        # add delta_day column
+        first_day = selected_plot_df['date'].min()
+        selected_plot_df['delta_days'] = np.nan
+        selected_plot_df['delta_days'] = (selected_plot_df['date'] - first_day)
+        selected_plot_df['delta_days'] = selected_plot_df['delta_days'].apply(lambda delta_t: delta_t.days)
+        measure_array = selected_plot_df['leaf_length'].values
+        time_array = selected_plot_df['delta_days'].values
+        # put it into kalman filter
+        result_day_array, result_kalman_array = kalman_leaf_length(time_array, measure_array)
+        # select from first day to the day with largest measurement
+        max_loc = np.argmax(result_kalman_array)
+        result_day_array = result_day_array[:max_loc]
+        result_kalman_array = result_kalman_array[:max_loc]
+        result_df = pd.DataFrame(columns=['local_datetime', 'leaf_length', 'delta_days', 'site'])
+        result_df['delta_days'] = result_day_array
+        result_df['delta_days'] = pd.to_timedelta(result_df['delta_days'], unit='d')
+        result_df['leaf_length'] = result_kalman_array
+        result_df['local_datetime'] = first_day
+        result_df['local_datetime'] = result_df['local_datetime'] + result_df['delta_days']
+        result_df['site'] = subplot_col_range_to_site_str(plot_col, plot_range, season_num)
+        result_df['species'] = 'Sorghum bicolor'
+        result_df['citation_author'] = 'Zeyu Zhang'
+        result_df['citation_year'] = '2019'
+        result_df['citation_title'] = 'Maricopa Field Station Data and Metadata'
+        result_df['method'] = 'Scanner 3d ply data to leaf length'
+        # save result only
+        result_df.to_pickle('./pkl_save_folder/col_{}_range_{}.pkl'.format(plot_col, plot_range))
+        all_plot_result_df.append(result_df)
+    all_plot_result_df.to_csv('./betydb_s{}_length_result.csv'.format(season_num))
+        
