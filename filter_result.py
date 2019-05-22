@@ -157,6 +157,7 @@ if __name__ == '__main__':
         leaves_dict = pickle.load(f)
     leaves_df = leaf_data_dict_to_dataframe(leaves_dict)
     # remove NaN
+    cleaned_leaves_df.loc[(cleaned_leaves_df[['leaf_width']] == 0).all(axis=1), 'leaf_width'] = np.nan
     leaves_df = leaves_df.dropna()
     # remove outliers of leaf width
     leaves_df.loc[(np.abs(stats.zscore(leaves_df[['leaf_width']])) > 0.1).all(axis=1), 'leaf_width'] = np.nan
