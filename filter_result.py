@@ -157,7 +157,7 @@ if __name__ == '__main__':
         leaves_dict = pickle.load(f)
     leaves_df = leaf_data_dict_to_dataframe(leaves_dict)
     # remove NaN
-    cleaned_leaves_df.loc[(cleaned_leaves_df[['leaf_width']] == 0).all(axis=1), 'leaf_width'] = np.nan
+    leaves_df.loc[(leaves_df[['leaf_width']] == 0).all(axis=1), 'leaf_width'] = np.nan
     leaves_df = leaves_df.dropna()
     # remove outliers of leaf width
     leaves_df.loc[(np.abs(stats.zscore(leaves_df[['leaf_width']])) > 0.1).all(axis=1), 'leaf_width'] = np.nan
@@ -199,6 +199,7 @@ if __name__ == '__main__':
         max_loc = np.argmax(result_kalman_length)
         result_day_array = result_day_array[:max_loc]
         result_kalman_length = result_kalman_length[:max_loc]
+        result_kalman_width = result_kalman_width[:max_loc]
         result_df = pd.DataFrame(columns=['local_datetime', 'leaf_length', 'leaf_width', 'delta_days', 'site'])
         result_df['delta_days'] = result_day_array
         result_df['delta_days'] = pd.to_timedelta(result_df['delta_days'], unit='d')
