@@ -57,7 +57,7 @@ def kalman_leaf_length(day_array, measure_array, assumed_start_val=100, assumed_
     if P is None:
         P =  np.matrix( '''
             1000. 0. ;
-            0. 4.''' )
+            0. 100.''' )
     R = 10000
     
     F = np.matrix( '''
@@ -91,7 +91,7 @@ def kalman_leaf_width(day_array, measure_array, assumed_start_val=15.0, assumed_
     if P is None:
         P =  np.matrix( '''
             200. 0. ;
-            0. 1.''' )
+            0. 10.''' )
     R = 1000
     
     F = np.matrix( '''
@@ -103,7 +103,7 @@ def kalman_leaf_width(day_array, measure_array, assumed_start_val=15.0, assumed_
     if Q is None:
         Q =  np.matrix( '''
             16. 0. ;
-            0. 1. ''' )
+            0. 2. ''' )
     m = np.matrix( '0.' ).T
     kalman_x = np.zeros( N )
     for n in range(N):
@@ -178,7 +178,7 @@ if __name__ == '__main__':
             continue
         # filter days with few data points 
         selected_plot_df = selected_plot_df.groupby(['date', 'col', 'range'])\
-            .filter(lambda x: x['leaf_length'].count() > 5)
+            .filter(lambda x: x['leaf_length'].count() > 4)
         if len(selected_plot_df['date'].unique()) < 30:
             continue
         # mean by average all (west east together)
@@ -200,7 +200,7 @@ if __name__ == '__main__':
         result_day_array = result_day_array[:max_loc]
         result_kalman_length = result_kalman_length[:max_loc]
         result_kalman_width = result_kalman_width[:max_loc]
-        result_df = pd.DataFrame(columns=['local_datetime', 'leaf_length', 'leaf_width', 'delta_days', 'site'])
+        result_df = pd.DataFrame(columns=['local_datetime', 'leaf_length', 'leaf_width', 'delta_days', 'site']) 
         result_df['delta_days'] = result_day_array
         result_df['delta_days'] = pd.to_timedelta(result_df['delta_days'], unit='d')
         result_df['leaf_length'] = result_kalman_length
@@ -214,6 +214,7 @@ if __name__ == '__main__':
         result_df['citation_title'] = 'Maricopa Field Station Data and Metadata'
         result_df['method'] = 'Scanner 3d ply data to leaf length'
         result_df = result_df.drop(['delta_days'], axis=1)
+        
         # save result only
         result_df.to_pickle(os.path.join(pkl_save_folder,'col_{}_range_{}.pkl'.format(plot_col, plot_range)))
         all_plot_result_df = all_plot_result_df.append(result_df)
