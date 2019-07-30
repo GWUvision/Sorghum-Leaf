@@ -1,19 +1,24 @@
 # emacs temp
 *~
+# emacs backup
+\#*#
 
 # ipynb
 .ipynb_checkpoints
 *.ipynb
 
-# test
-test*
+# test dataset
+test_pkl
 
 # csv
 *.csv
 
-# emacs backup
-\#*#
-
 # pycache
 *.pyc
 __pycache__
+
+# pkl
+*.pkl
+
+# vscode
+.vscode
