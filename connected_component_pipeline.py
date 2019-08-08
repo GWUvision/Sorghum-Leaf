@@ -101,7 +101,7 @@ def crop_mask_by_rect(mask, xyz_map, mask_id, rect, downsample=False):
     cropped_xyz_map = xyz_map[rect[0]:rect[2], rect[1]:rect[3], :]
     cropped_xyz_map = cropped_xyz_map[:, ~np.all(cropped_mask == 0, axis=0), :]
     cropped_xyz_map = cropped_xyz_map[~np.all(cropped_mask == 0, axis=1), :, :]
-    w, h = cropped_mask.shape
+    h, w = cropped_mask.shape
     if downsample and max(w, h) > 100:
         ds_ratio = math.ceil(max(w, h)/100)
         cropped_mask = cropped_mask[::ds_ratio, ::ds_ratio]
@@ -319,7 +319,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
 
 
 def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
-                 sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.INFO):
+                 sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.INFO, debug=False, sample_leaves=True):
     '''
     Run single analysis
     :param raw_data_folder: folder to the raw data. Eg. /path/to/data/raw/scanner3DTop/2016-04-30/2016-04-30__12-55-42-331/
@@ -337,6 +337,8 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     # Logger
     cpname = multiprocessing.current_process().name
     logger = logging.getLogger('ppln_' + os.path.basename(os.path.dirname(raw_data_folder)) + '_' + cpname)
+    if (logger.hasHandlers()):
+        logger.handlers.clear()
     logger.setLevel(log_lv)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s:\t%(message)s')
     ch = logging.StreamHandler()
@@ -344,11 +346,13 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     logger.info('Start processing')
-
     raw_data_folder = os.path.join(raw_data_folder, '')
     ply_data_folder = os.path.join(ply_data_folder, '')
     folder_name = os.path.basename(os.path.dirname(raw_data_folder))
     pkl_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.pkl')
+    if debug:
+        debug_image_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.png')
+    # leaves_info = [] #save the detail of each leaf for visualization with debug flag  
     # get p/g image and ply filename
     for filename in os.listdir(raw_data_folder):
         if sensor_name + '_0_g.png' in filename:
@@ -451,16 +455,20 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     leaf_cr_list = []  # col range
     logger.info('start finding leaves')
     leaves_finding_start = timer()
-    mask_list, dxyz_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02)
+    if debug:
+        mask_list, dxyz_list, bbox_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02, debug=True)
+        debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
+    else:
+        mask_list, dxyz_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02)
     leaves_finding_end = timer()
     logger.info('{} leaves found, time elapsed: {}'.format(len(mask_list), leaves_finding_end - leaves_finding_start))
     logger.info('start processing leaves')
     leaves_proc_start = timer()
     # random sample to reduce the time consuming
-    if len(mask_list) > 100:
+    if sample_leaves and len(mask_list) > 100 and not debug:
         sampled_idx = np.random.choice(len(mask_list), 100)
     else:
-        smapled_idx = range(len(mask_list))
+        sampled_idx = range(len(mask_list))
     for idx in sampled_idx:
         leaf_mask = mask_list[idx]
         leaf_dxyz = dxyz_list[idx]
@@ -484,6 +492,40 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         leaf_length_list.append(slm.leaf_len)
         leaf_width_list.append(slm.leaf_width)
         leaf_cr_list.append((plot_col, plot_row))
+        if debug and slm.leaf_len_path is not None and slm.leaf_edge is not None:
+            h = bbox_list[idx][2] - bbox_list[idx][0]
+            w = bbox_list[idx][3] - bbox_list[idx][1]
+            if max(w, h) > 100:
+                upsample_factor = math.ceil(max(w, h)/100)
+            else:
+                upsample_factor = 1
+            leaf_length_path = np.array(slm.leaf_len_path.copy()) * upsample_factor
+            leaf_length_path += bbox_list[idx][:2]
+            leaf_length_path -= [1, 1]
+            # leaf_width_path = np.array(slm.leaf_width_path.copy()) * upsample_factor
+            # leaf_width_path += bbox_list[idx][:2]
+            # leaf_width_path -= [1, 1]
+            leaf_edge = np.array(slm.leaf_edge.copy()) * upsample_factor
+            leaf_edge += bbox_list[idx][:2]
+            leaf_edge -= [1, 1]
+            # leaves_info.append([leaf_edge, leaf_length_path, leaf_width_path])
+            from skimage.draw import polygon_perimeter, line
+            edge_r, edge_c = polygon_perimeter(leaf_edge[:, 0], leaf_edge[:, 1], debug_image.shape, clip=True)
+            #width_r, width_c = polygon_perimeter(leaf_width_path[:, 0], leaf_width_path[:, 1], debug_image.shape, clip=False)
+            length_r, length_c = [], []
+            for i in range(1, len(leaf_length_path)):
+                line_rr, line_cc = line(leaf_length_path[i-1][0], leaf_length_path[i-1][1], leaf_length_path[i][0],leaf_length_path[i][1])
+                length_r.extend(line_rr)
+                length_c.extend(line_cc)
+            length_r = np.asarray(length_r)
+            length_c = np.asarray(length_c)
+
+
+            # length_r, length_c = polygon_perimeter(leaf_length_path[:, 0], leaf_length_path[:, 1], debug_image.shape, clip=True)
+            debug_image[edge_r, edge_c] = (0, 255, 0)
+            debug_image[length_r, length_c] = (255, 0, 0)
+            # debug_image[width_r, width_c] = (0, 255, 0)
+
     leaves_proc_end = timer()
     logger.info('Leaves processed. Time elapsed:{} s'.format(leaves_proc_end - leaves_proc_start))
     leaf_len_dict = {}
@@ -495,6 +537,13 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         pickle.dump(leaf_len_dict, pickle_f)
     if download_ply:
         shutil.rmtree(ply_data_folder)
+    if debug:
+        sio.imsave(debug_image_file_path, debug_image)
     logger.info('finished')
     return 0
 
+if __name__ == '__main__':
+    raw_folder = '/pless_nfs/home/terraref/scanner3DTop/raw_data/2017-05-20/2017-05-20__02-31-38-958'
+    ply_folder = '/pless_nfs/home/terraref/scanner3DTop/Level_1/2017-05-20/2017-05-20__02-31-38-958' 
+    out_folder = './test_debug'  
+    run_analysis_strip(raw_folder, ply_folder, out_folder, debug=True)
