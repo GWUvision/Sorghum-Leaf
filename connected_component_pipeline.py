@@ -23,7 +23,7 @@ def options():
     return args
 
 
-def connected_component(image, gradient_threshold=10):
+def connected_component(image, gradient_threshold=3):
     '''
     if the upper and lower bound is not given, throw the regions that  pixel count from top and bottom 1/4
     '''
