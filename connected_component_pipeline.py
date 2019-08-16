@@ -351,7 +351,9 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     folder_name = os.path.basename(os.path.dirname(raw_data_folder))
     pkl_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.pkl')
     if debug:
+        debug_info = {}
         debug_image_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.png')
+        debug_dict_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '_debug.pkl')
     # leaves_info = [] #save the detail of each leaf for visualization with debug flag  
     # get p/g image and ply filename
     for filename in os.listdir(raw_data_folder):
@@ -456,7 +458,9 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.info('start finding leaves')
     leaves_finding_start = timer()
     if debug:
+        debug_info['all_mask'], _, debug_info['all_bbox_list'] = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.0, debug=True)
         mask_list, dxyz_list, bbox_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02, debug=True)
+        debug_info['trimmed_by_size_mask'], debug_info['trimmed_by_size_bbox'] = mask_list, bbox_list
         debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
     else:
         mask_list, dxyz_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02)
@@ -470,6 +474,10 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     else:
         sampled_idx = range(len(mask_list))
     for idx in sampled_idx:
+        # hot fix remove background 
+        # TODO move this in the heur search
+        if idx == 0:
+            continue
         leaf_mask = mask_list[idx]
         leaf_dxyz = dxyz_list[idx]
         leaf_start = timer()
@@ -539,11 +547,13 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         shutil.rmtree(ply_data_folder)
     if debug:
         sio.imsave(debug_image_file_path, debug_image)
+        with open(debug_dict_file_path, 'wb') as pickle_f:
+            pickle.dump(debug_info, pickle_f)
     logger.info('finished')
     return 0
 
 if __name__ == '__main__':
-    raw_folder = '/pless_nfs/home/terraref/scanner3DTop/raw_data/2017-05-20/2017-05-20__02-31-38-958'
-    ply_folder = '/pless_nfs/home/terraref/scanner3DTop/Level_1/2017-05-20/2017-05-20__02-31-38-958' 
+    raw_folder = '/pless_nfs/home/terraref/scanner3DTop/raw_data/2017-06-13/2017-06-13__20-00-34-456/'
+    ply_folder = '/pless_nfs/home/terraref/scanner3DTop/Level_1/2017-06-13/2017-06-13__20-00-34-456/' 
     out_folder = './test_debug'  
     run_analysis_strip(raw_folder, ply_folder, out_folder, debug=True)
