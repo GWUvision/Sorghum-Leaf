@@ -257,6 +257,9 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
         orientation = props.orientation
         if props.major_axis_length < ratio_threshold * props.minor_axis_length:
             continue
+        # remove the cutted leaved by the image edge
+        if 0 in props.bbox:
+            continue
         minr, minc, maxr, maxc = props.bbox
         leaves_bbox.append([minr, minc, maxr, maxc])
         label_id_list.append([props.label])
