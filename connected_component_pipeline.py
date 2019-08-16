@@ -29,7 +29,8 @@ def connected_component(image, gradient_threshold=10):
     '''
     
     gx, gy = np.gradient(image)
-    edge = (np.abs(gx) < gradient_threshold) & (np.abs(gy) < gradient_threshold)  # & (pc_xyz_square[:, :, 2]>1)
+    # 2.7 is the ratio diff between resolution of x-axis and y-axis
+    edge = (np.abs(gx) < gradient_threshold) & (np.abs(gy) < gradient_threshold/2.7)  # & (pc_xyz_square[:, :, 2]>1)
     #all_labels = measure.label(edge, background=0)
     all_labels = measure.label(edge, connectivity=1)
     label_img = np.zeros(all_labels.shape)
