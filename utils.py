@@ -269,3 +269,15 @@ def array_zero_to_nan(array):
     nan_array = array.copy().astype(float)
     nan_array[nan_array==0] = np.nan
     return nan_array
+
+def draw_attr(image, attr_dict, loc, line_height, font=cv2.FONT_HERSHEY_SIMPLEX, thickness=1, linespace= None):
+    if linespace is None:
+        linespace = int(line_height/2)
+    font_scale = cv2.getFontScaleFromHeight(font, line_height, thickness)
+    text_org_x = int(loc[0])
+    text_org_y = int(loc[1] - len(attr_dict.keys()) * (line_height + linespace)/2 + (line_height + linespace))
+    print(text_org_y)
+    for key, val in attr_dict.items():
+        text = '{}: {}'.format(key, val)
+        cv2.putText(image, text, (text_org_x, text_org_y), font, font_scale, 255, thickness=thickness)
+        text_org_y += (line_height + linespace)
