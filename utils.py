@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import math
 from skimage.measure import regionprops
+from skimage import filters
 from datetime import datetime
 from scipy import stats
 
@@ -254,7 +255,6 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
             continue
         y0, x0 = props.centroid
         yw, xw = props.weighted_centroid
-        orientation = props.orientation
         if props.major_axis_length < ratio_threshold * props.minor_axis_length:
             continue
         # remove the cutted leaved by the image edge
@@ -262,7 +262,7 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
             continue
         minr, minc, maxr, maxc = props.bbox
         leaves_bbox.append([minr, minc, maxr, maxc])
-        label_id_list.append([props.label])
+        label_id_list.append(props.label)
     return leaves_bbox, label_id_list
 
 def array_zero_to_nan(array):
@@ -276,8 +276,15 @@ def draw_attr(image, attr_dict, loc, line_height, font=cv2.FONT_HERSHEY_SIMPLEX,
     font_scale = cv2.getFontScaleFromHeight(font, line_height, thickness)
     text_org_x = int(loc[0])
     text_org_y = int(loc[1] - len(attr_dict.keys()) * (line_height + linespace)/2 + (line_height + linespace))
-    print(text_org_y)
     for key, val in attr_dict.items():
-        text = '{}: {}'.format(key, val)
+        if val is None:
+            val = float('nan')
+        text = '{}: {:.2f}'.format(key, val)
         cv2.putText(image, text, (text_org_x, text_org_y), font, font_scale, 255, thickness=thickness)
         text_org_y += (line_height + linespace)
+
+def region_smoothness(image, mask):
+    laplace_im = np.abs(filters.laplace(image))
+    mask = mask.astype(bool)
+    region_area = np.count_nonzero(mask)
+    return laplace_im[mask].sum()/region_area
