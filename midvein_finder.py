@@ -88,6 +88,7 @@ class SorghumLeafMeasure:
         return self.leaf_len
 
     def split_leaf_edge(self):
+        """Using the two endpoints of the leaf to seperate the leaf edge as two part"""
         endpoint_0 = self.leaf_len_path[0]
         endpoint_1 = self.leaf_len_path[-1]
         endpoint_0_idx = np.where((self.leaf_edge == endpoint_0).all(axis=1))[0][0]
@@ -102,20 +103,30 @@ class SorghumLeafMeasure:
         # get points of n-section
         split_length = self.leaf_len / split_n
         next_point_position = split_length
-        perv_travelled = 0.0
+        prev_travelled = 0.0
         n_section_points_list = []
+        travelled = 0.0
+        target_length = split_length
         for i in range(1, len(self.leaf_len_path) - 1):
-            vector_to_next = np.array(self.leaf_len_path[i]) - np.array(self.leaf_len_path[i-1]) 
-            points_distance = np.linalg.norm(vector_to_next)
-            current_travelled = perv_travelled + points_distance
-            while current_travelled > next_point_position:
-                length_ratio = (next_point_position - perv_travelled) / points_distance
-                n_section_point = np.array(self.leaf_len_path[i-1]) + length_ratio * (vector_to_next)
-                n_section_points_list.append(n_section_point.round().astype(int))
-                next_point_position += split_length
-            if len(n_section_points_list) >= split_n:
-                break
-            perv_travelled = current_travelled
+            # |----+|--------+-----+---
+            vector_length = self.leaf_graph[self.leaf_len_path[i-1]][self.leaf_len_path[i]]['weight']
+            travelled += vector_length
+            if travelled >= target_length:
+                n_section_points_list.append(self.leaf_len_path[i])
+                target_length += split_length
+
+        # for i in range(1, len(self.leaf_len_path) - 1):
+        #     vector_to_next = np.array(self.leaf_len_path[i]) - np.array(self.leaf_len_path[i-1]) 
+        #     points_distance = np.linalg.norm(vector_to_next)
+        #     current_travelled = prev_travelled + points_distance
+        #     while current_travelled > next_point_position:
+        #         length_ratio = (next_point_position - prev_travelled) / points_distance
+        #         n_section_point = np.array(self.leaf_len_path[i-1]) + length_ratio * (vector_to_next)
+        #         n_section_points_list.append(n_section_point.round().astype(int))
+        #         next_point_position += split_length
+        #     if len(n_section_points_list) >= split_n:
+        #         break
+        #     prev_travelled = current_travelled
             
         self.leaf_width_mid_points = np.array(n_section_points_list)
         # Throw outside n_section point
