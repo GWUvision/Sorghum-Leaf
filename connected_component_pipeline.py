@@ -128,7 +128,7 @@ def find_leaves(dxyz_map, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, 
         mask_list.append(id_mask)
         xyzd_list.append(id_xyzd)
     if debug:
-        return mask_list, xyzd_list, leaf_bbox_list
+        return mask_list, xyzd_list, leaf_bbox_list, label_id_list, cc_mask
     else:
         return mask_list, xyzd_list
 
@@ -459,10 +459,13 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.info('start finding leaves')
     leaves_finding_start = timer()
     if debug:
-        debug_info['all_mask'], _, debug_info['all_bbox_list'] = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.0, debug=True)
-        mask_list, dxyz_list, bbox_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02, debug=True)
+        debug_info['all_mask'], _, debug_info['all_bbox_list'], _, _ = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.0, debug=True)
+        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.00, debug=True)
         debug_info['trimmed_by_size_mask'], debug_info['trimmed_by_size_bbox'] = mask_list, bbox_list
         debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
+        # find the prop of regions for debugging
+        from skimage.measure import regionprops
+        regions_prop = regionprops(connected_component_mask.astype(int), ply_dxyz[:, :, 3], coordinates='rc')
     else:
         mask_list, dxyz_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02)
     leaves_finding_end = timer()
@@ -474,7 +477,13 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         sampled_idx = np.random.choice(len(mask_list), 100)
     else:
         sampled_idx = range(len(mask_list))
-    for idx in sampled_idx:
+    if debug:
+        from tqdm import tqdm
+        import sys
+        sampled_idx_iter = tqdm(sampled_idx, file=sys.stdout)
+    else:
+        sampled_idx_iter = sampled_idx
+    for idx in sampled_idx_iter:
         # hot fix remove background 
         # TODO move this in the heur search
         if idx == 0:
@@ -502,6 +511,19 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
         leaf_width_list.append(slm.leaf_width)
         leaf_cr_list.append((plot_col, plot_row))
         if debug and slm.leaf_len_path is not None and slm.leaf_edge is not None:
+            output_props = {}
+            region_id = label_id_list[idx] - 1
+            
+            output_props['leaf_l'] = slm.leaf_len
+            output_props['leaf_w'] = slm.leaf_width
+            output_props['leaf_avg_h'] = regions_prop[region_id].mean_intensity
+            output_props['leaf_max_h'] = regions_prop[region_id].max_intensity
+            output_props['bound_rough'] = regions_prop[region_id].perimeter / 4*regions_prop[region_id].major_axis_length
+            output_props['region_rough'] = utils.region_smoothness(leaf_dxyz[:, :, 3], leaf_mask)
+            output_props['axis_ratio'] = regions_prop[region_id].major_axis_length / regions_prop[region_id].minor_axis_length
+
+            centroid = regions_prop[region_id].centroid
+
             h = bbox_list[idx][2] - bbox_list[idx][0]
             w = bbox_list[idx][3] - bbox_list[idx][1]
             if max(w, h) > 100:
@@ -520,7 +542,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             # leaves_info.append([leaf_edge, leaf_length_path, leaf_width_path])
             from skimage.draw import polygon_perimeter, line
             edge_r, edge_c = polygon_perimeter(leaf_edge[:, 0], leaf_edge[:, 1], debug_image.shape, clip=True)
-            #width_r, width_c = polygon_perimeter(leaf_width_path[:, 0], leaf_width_path[:, 1], debug_image.shape, clip=False)
+            # width_r, width_c = polygon_perimeter(leaf_width_path[:, 0], leaf_width_path[:, 1], debug_image.shape, clip=False)
             length_r, length_c = [], []
             for i in range(1, len(leaf_length_path)):
                 line_rr, line_cc = line(leaf_length_path[i-1][0], leaf_length_path[i-1][1], leaf_length_path[i][0],leaf_length_path[i][1])
@@ -534,6 +556,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             debug_image[edge_r, edge_c] = (0, 255, 0)
             debug_image[length_r, length_c] = (255, 0, 0)
             # debug_image[width_r, width_c] = (0, 255, 0)
+            utils.draw_attr(debug_image, output_props, [centroid[1], centroid[0]], 10)
 
     leaves_proc_end = timer()
     logger.info('Leaves processed. Time elapsed:{} s'.format(leaves_proc_end - leaves_proc_start))
