@@ -1,5 +1,5 @@
 # Sorghum-Leaf
-Requirements:
+## Requirements
 
 numpy
 scipy
@@ -9,6 +9,9 @@ networkx
 globus_sdk
 gdal
 utm
+## Description 
+The description is [here](doc/length_documentation.md)
+## Usage
 ```
 usage: run-pipeline [-h] --raw-path RAW_PATH --ply-path PLY_PATH -o
                     OUTPUT_PATH --start START --end END [--no-download]
