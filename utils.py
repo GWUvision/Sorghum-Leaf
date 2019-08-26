@@ -214,7 +214,7 @@ def ply_offset(ply_data, json_info):
     return ply_data
 
 
-def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_lower=0.5, pixel_upper=0.05):
+def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower=0.5, pixel_upper=0.05):
     """ heuristic serach valid leaves from the region mask
     Parameters
     ----------
@@ -236,7 +236,7 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
     """
     leaves_bbox = []
     label_id_list = []
-    regions = regionprops(regions_mask.astype(int), point_cloud_z, coordinates='rc')
+    regions = regionprops(regions_mask.astype(int), dxyz[:, :,3], coordinates='rc')
     pixel_count_list = [props.area for props in regions if props.mean_intensity != 0]
     # print(len(pixel_count_list))
     pixel_count_list = list(filter(lambda x: x > 20, pixel_count_list))
@@ -244,6 +244,9 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
                                                  relative=True).compressed()
     area_lower = min(trimmed_pixel_count_list)
     area_upper = max(trimmed_pixel_count_list)
+    good_regions = []
+    good_regions_col_range = []
+    im_h, im_w, _ = dxyz.shape
     for props in regions:
         # TODO move mean intensity check on the top combine with region area
         if  props.area > area_upper or props.area < area_lower:
@@ -257,12 +260,33 @@ def heuristic_search_leaf(regions_mask, point_cloud_z, ratio_threshold=3, pixel_
         yw, xw = props.weighted_centroid
         if props.major_axis_length < ratio_threshold * props.minor_axis_length:
             continue
-        # remove the cutted leaved by the image edge
-        if 0 in props.bbox:
+        # remove the cutted leaved by the image edge, bleed 1 pxiel
+        if 0 in props.bbox or props.bbox[2] >= im_h - 2 or props.bbox[3] >= im_w - 2:
             continue
-        minr, minc, maxr, maxc = props.bbox
-        leaves_bbox.append([minr, minc, maxr, maxc])
-        label_id_list.append(props.label)
+        good_regions_col_range.append(
+            cc.fieldPosition_to_fieldPartition(dxyz[int(y0), int(x0), 1] * 0.001, dxyz[int(y0), int(x0), 2] * 0.001))
+        good_regions.append(props)
+    # remove components by height
+    # 1. for each leaf, find the plot col&range [prev loop]
+    # 2. group by col&range
+    # 3. fore each group
+    #    1. trim by [0.5, 1]
+    plots = np.unique(good_regions_col_range, axis=0)
+    high_good_regions = []
+    for plot in plots:
+        indice = np.where((good_regions_col_range==plot).all(axis=1))[0]
+        regions_in_plot = [good_regions[i] for i in indice]
+        region_height_in_plot = [x.max_intensity for x in regions_in_plot]
+        min_height = np.min(region_height_in_plot)
+        max_height = np.max(region_height_in_plot)
+        mid_height = min_height + (max_height - min_height) / 2 
+        high_regions_in_plot = [region for region in regions_in_plot if region.max_intensity > mid_height]
+        high_good_regions.extend(high_regions_in_plot)
+    good_regions = high_good_regions
+
+    label_id_list = [x.label for x in good_regions]
+    leaves_bbox = [x.bbox for x in good_regions]
+
     return leaves_bbox, label_id_list
 
 def array_zero_to_nan(array):

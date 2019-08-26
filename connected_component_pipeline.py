@@ -114,12 +114,12 @@ def crop_mask_by_rect(mask, xyz_map, mask_id, rect, downsample=False):
     return cropped_mask, cropped_xyz_map
 
 
-def find_leaves(dxyz_map, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, downsample=True, debug=False):
+def find_leaves(dxyz_map, cc, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, downsample=True, debug=False):
     # connected component
     cc_mask = connected_component(dxyz_map[:, :, 3])
     # heuristic search leaves that ellipse major > 3 * minor
     leaf_bbox_list, label_id_list = \
-        utils.heuristic_search_leaf(cc_mask, dxyz_map[:, :, 3],
+        utils.heuristic_search_leaf(cc_mask, dxyz_map, cc,
                                     ratio_threshold=ratio_threshold, pixel_lower=pixel_lower, pixel_upper=pixel_upper)
     mask_list = []
     xyzd_list = []
@@ -278,7 +278,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
     leaf_width_list = []
     for dxyz_slice in dxyz_slice_list:
         slice_start = timer()
-        mask_list, dxyz_list = find_leaves(dxyz_slice, pixel_lower=0.7, pixel_upper=0.05)
+        mask_list, dxyz_list = find_leaves(dxyz_slice, cc, pixel_lower=0.7, pixel_upper=0.05)
         plot_leaf_length_list = []
         plot_leaf_width_list = []
         for leaf_mask, leaf_dxyz in zip(mask_list, dxyz_list):
@@ -459,15 +459,15 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.info('start finding leaves')
     leaves_finding_start = timer()
     if debug:
-        debug_info['all_mask'], _, debug_info['all_bbox_list'], _, _ = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.0, debug=True)
-        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, pixel_lower=0.0, pixel_upper=0.00, debug=True)
+        debug_info['all_mask'], _, debug_info['all_bbox_list'], _, _ = find_leaves(ply_dxyz, cc, pixel_lower=0.0, pixel_upper=0.0, debug=True)
+        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, cc, pixel_lower=0.0, pixel_upper=0.00, debug=True)
         debug_info['trimmed_by_size_mask'], debug_info['trimmed_by_size_bbox'] = mask_list, bbox_list
         debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
         # find the prop of regions for debugging
         from skimage.measure import regionprops
         regions_prop = regionprops(connected_component_mask.astype(int), ply_dxyz[:, :, 3], coordinates='rc')
     else:
-        mask_list, dxyz_list = find_leaves(ply_dxyz, pixel_lower=0.9, pixel_upper=0.02)
+        mask_list, dxyz_list = find_leaves(ply_dxyz, cc, pixel_lower=0.9, pixel_upper=0.02)
     leaves_finding_end = timer()
     logger.info('{} leaves found, time elapsed: {}'.format(len(mask_list), leaves_finding_end - leaves_finding_start))
     logger.info('start processing leaves')
@@ -516,11 +516,11 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             
             output_props['leaf_l'] = slm.leaf_len
             output_props['leaf_w'] = slm.leaf_width
-            output_props['leaf_avg_h'] = regions_prop[region_id].mean_intensity
-            output_props['leaf_max_h'] = regions_prop[region_id].max_intensity
-            output_props['bound_rough'] = regions_prop[region_id].perimeter / 4*regions_prop[region_id].major_axis_length
+            #output_props['leaf_avg_h'] = regions_prop[region_id].mean_intensity
+            #output_props['leaf_max_h'] = regions_prop[region_id].max_intensity
+            #output_props['bound_rough'] = regions_prop[region_id].perimeter / 4*regions_prop[region_id].major_axis_length
             output_props['region_rough'] = utils.region_smoothness(leaf_dxyz[:, :, 3], leaf_mask)
-            output_props['axis_ratio'] = regions_prop[region_id].major_axis_length / regions_prop[region_id].minor_axis_length
+            #output_props['axis_ratio'] = regions_prop[region_id].major_axis_length / regions_prop[region_id].minor_axis_length
 
             centroid = regions_prop[region_id].centroid
 
@@ -556,7 +556,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             debug_image[edge_r, edge_c] = (0, 255, 0)
             debug_image[length_r, length_c] = (255, 0, 0)
             # debug_image[width_r, width_c] = (0, 255, 0)
-            utils.draw_attr(debug_image, output_props, [centroid[1], centroid[0]], 10)
+            #utils.draw_attr(debug_image, output_props, [centroid[1], centroid[0]], 10)
 
     leaves_proc_end = timer()
     logger.info('Leaves processed. Time elapsed:{} s'.format(leaves_proc_end - leaves_proc_start))
