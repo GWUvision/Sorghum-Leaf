@@ -352,6 +352,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     folder_name = os.path.basename(os.path.dirname(raw_data_folder))
     pkl_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.pkl')
     if debug:
+        import cv2
         debug_info = {}
         debug_image_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.png')
         debug_dict_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '_debug.pkl')
@@ -452,6 +453,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.debug('align data time elapsed: {0:.3f}s'.format(align_end - align_start))
     if not per_plot:
         pass
+    
 
     leaf_length_list = []
     leaf_width_list = []
@@ -460,14 +462,14 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     leaves_finding_start = timer()
     if debug:
         debug_info['all_mask'], _, debug_info['all_bbox_list'], _, _ = find_leaves(ply_dxyz, cc, pixel_lower=0.0, pixel_upper=0.0, debug=True)
-        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, cc, pixel_lower=0.0, pixel_upper=0.00, debug=True)
+        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, cc, pixel_lower=0.8, pixel_upper=0.02, debug=True)
         debug_info['trimmed_by_size_mask'], debug_info['trimmed_by_size_bbox'] = mask_list, bbox_list
         debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
         # find the prop of regions for debugging
         from skimage.measure import regionprops
         regions_prop = regionprops(connected_component_mask.astype(int), ply_dxyz[:, :, 3], coordinates='rc')
     else:
-        mask_list, dxyz_list = find_leaves(ply_dxyz, cc, pixel_lower=0.9, pixel_upper=0.02)
+        mask_list, dxyz_list = find_leaves(ply_dxyz, cc, pixel_lower=0.8, pixel_upper=0.02)
     leaves_finding_end = timer()
     logger.info('{} leaves found, time elapsed: {}'.format(len(mask_list), leaves_finding_end - leaves_finding_start))
     logger.info('start processing leaves')
@@ -533,28 +535,15 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             leaf_length_path = np.array(slm.leaf_len_path.copy()) * upsample_factor
             leaf_length_path += bbox_list[idx][:2]
             leaf_length_path -= [1, 1]
-            # leaf_width_path = np.array(slm.leaf_width_path.copy()) * upsample_factor
-            # leaf_width_path += bbox_list[idx][:2]
-            # leaf_width_path -= [1, 1]
+            leaf_width_path = np.array(slm.leaf_width_path.copy()) * upsample_factor
+            leaf_width_path += bbox_list[idx][:2]
+            leaf_width_path -= [1, 1]
             leaf_edge = np.array(slm.leaf_edge.copy()) * upsample_factor
             leaf_edge += bbox_list[idx][:2]
             leaf_edge -= [1, 1]
-            # leaves_info.append([leaf_edge, leaf_length_path, leaf_width_path])
-            from skimage.draw import polygon_perimeter, line
-            edge_r, edge_c = polygon_perimeter(leaf_edge[:, 0], leaf_edge[:, 1], debug_image.shape, clip=True)
-            # width_r, width_c = polygon_perimeter(leaf_width_path[:, 0], leaf_width_path[:, 1], debug_image.shape, clip=False)
-            length_r, length_c = [], []
-            for i in range(1, len(leaf_length_path)):
-                line_rr, line_cc = line(leaf_length_path[i-1][0], leaf_length_path[i-1][1], leaf_length_path[i][0],leaf_length_path[i][1])
-                length_r.extend(line_rr)
-                length_c.extend(line_cc)
-            length_r = np.asarray(length_r)
-            length_c = np.asarray(length_c)
-
-
-            # length_r, length_c = polygon_perimeter(leaf_length_path[:, 0], leaf_length_path[:, 1], debug_image.shape, clip=True)
-            debug_image[edge_r, edge_c] = (0, 255, 0)
-            debug_image[length_r, length_c] = (255, 0, 0)
+            cv2.polylines(debug_image, [leaf_edge[:, [1, 0]]], True, (0, 255, 0))
+            cv2.polylines(debug_image, [leaf_length_path[:, [1, 0]]], False, (255, 0, 0))
+            cv2.polylines(debug_image, [leaf_width_path[:, [1, 0]]], False, (0, 0, 255))
             # debug_image[width_r, width_c] = (0, 255, 0)
             #utils.draw_attr(debug_image, output_props, [centroid[1], centroid[0]], 10)
 
