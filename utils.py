@@ -237,7 +237,7 @@ def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower
     leaves_bbox = []
     label_id_list = []
     regions = regionprops(regions_mask.astype(int), dxyz[:, :,3], coordinates='rc')
-    pixel_count_list = [props.area for props in regions if props.mean_intensity != 0]
+    pixel_count_list = [props.area for props in regions]
     # print(len(pixel_count_list))
     pixel_count_list = list(filter(lambda x: x > 20, pixel_count_list))
     trimmed_pixel_count_list = stats.mstats.trim(pixel_count_list, (pixel_lower, pixel_upper),
@@ -249,8 +249,8 @@ def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower
     im_h, im_w, _ = dxyz.shape
     for props in regions:
         # TODO move mean intensity check on the top combine with region area
-        if  props.area > area_upper or props.area < area_lower:
-            continue
+        # if  props.area > area_upper or props.area < area_lower:
+        #     continue
         if props.mean_intensity == 0:
             continue
         good_pixel_count = np.count_nonzero(props.intensity_image)
@@ -263,6 +263,9 @@ def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower
         # remove the cutted leaved by the image edge, bleed 1 pxiel
         if 0 in props.bbox or props.bbox[2] >= im_h - 2 or props.bbox[3] >= im_w - 2:
             continue
+        # remove region that smaller than 6
+        if props.bbox[2] - props.bbox[0] < 6 or props.bbox[3] - props.bbox[1] < 6:
+            continue
         good_regions_col_range.append(
             cc.fieldPosition_to_fieldPartition(dxyz[int(y0), int(x0), 1] * 0.001, dxyz[int(y0), int(x0), 2] * 0.001))
         good_regions.append(props)
@@ -272,17 +275,26 @@ def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower
     # 3. fore each group
     #    1. trim by [0.5, 1]
     plots = np.unique(good_regions_col_range, axis=0)
-    high_good_regions = []
+    per_plot_good_regions = []
     for plot in plots:
+        good_regions_in_plot = []
+        # filter by height
         indice = np.where((good_regions_col_range==plot).all(axis=1))[0]
         regions_in_plot = [good_regions[i] for i in indice]
         region_height_in_plot = [x.max_intensity for x in regions_in_plot]
         min_height = np.min(region_height_in_plot)
         max_height = np.max(region_height_in_plot)
         mid_height = min_height + (max_height - min_height) / 2 
-        high_regions_in_plot = [region for region in regions_in_plot if region.max_intensity > mid_height]
-        high_good_regions.extend(high_regions_in_plot)
-    good_regions = high_good_regions
+        high_regions_in_plot = [region for region in regions_in_plot if region.max_intensity >= mid_height]
+        # filter by trimming of region size per plot 
+        pixel_count_list = [props.area for props in high_regions_in_plot]
+        area_lower, area_upper = np.percentile(pixel_count_list, [pixel_lower*100, 100 - (pixel_upper*100)])
+        for props in high_regions_in_plot:
+            if  props.area > area_upper or props.area < area_lower:
+                continue
+            good_regions_in_plot.append(props)
+        per_plot_good_regions.extend(good_regions_in_plot)
+    good_regions = per_plot_good_regions
 
     label_id_list = [x.label for x in good_regions]
     leaves_bbox = [x.bbox for x in good_regions]
