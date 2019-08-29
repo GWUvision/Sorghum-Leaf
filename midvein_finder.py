@@ -107,13 +107,14 @@ class SorghumLeafMeasure:
         n_section_points_list = []
         travelled = 0.0
         target_length = split_length
-        for i in range(1, len(self.leaf_len_path) - 1):
+        for i in range(1, len(self.leaf_len_path)):
             # |----+|--------+-----+---
             vector_length = self.leaf_graph[self.leaf_len_path[i-1]][self.leaf_len_path[i]]['weight']
             travelled += vector_length
             if travelled >= target_length:
                 n_section_points_list.append(self.leaf_len_path[i])
-                target_length += split_length
+                while travelled >= target_length:
+                    target_length += split_length
 
         # for i in range(1, len(self.leaf_len_path) - 1):
         #     vector_to_next = np.array(self.leaf_len_path[i]) - np.array(self.leaf_len_path[i-1]) 
@@ -130,7 +131,7 @@ class SorghumLeafMeasure:
             
         self.leaf_width_mid_points = np.array(n_section_points_list)
         # Throw outside n_section point
-        n_section_points_list = list(filter (lambda x: tuple(x) in self.leaf_graph.node and ~any(np.equal(self.leaf_edge, x).all(1)), n_section_points_list))
+        # n_section_points_list = list(filter (lambda x: tuple(x) in self.leaf_graph.node and ~any(np.equal(self.leaf_edge, x).all(1)), n_section_points_list))
         
         aux_edges = []
         for edge_point in self.leaf_edge:
@@ -188,8 +189,6 @@ class SorghumLeafMeasure:
             #                                      tuple(nearest_point_on_edge_other_side))
             n_section_leaf_width_list.append(leaf_width)
             n_section_leaf_width_path_list.append(leaf_width_path)
-        if len(n_section_leaf_width_path_list) == 0: 
-            return None
         max_idx = np.argmax(n_section_leaf_width_list)
         self.leaf_width = n_section_leaf_width_list[max_idx]
         self.leaf_width_path = n_section_leaf_width_path_list[max_idx]
