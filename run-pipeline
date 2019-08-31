@@ -8,7 +8,9 @@ import argparse
 from connected_component_pipeline import run_analysis, run_analysis_strip
 from multiprocessing import Pool
 from datetime import datetime
-
+from terra_common import CoordinateConverter as CC
+import tempfile
+import pickle
 
 def parse_args():
     # TODO add arg for globus refresh token
@@ -54,6 +56,13 @@ logger.info('\n\t raw data path: {}'
 
 start_date = datetime.strptime(args.start, '%Y-%m-%d')
 end_date = datetime.strptime(args.end, '%Y-%m-%d')
+cc_tmp_file = tempfile.NamedTemporaryFile(delete=False)
+cc = CC(useSubplot=True)
+logger.info('bety query start.')
+cc.bety_query(start_date, useSubplot=True)
+logger.info('bety query complete.')
+pickle.dump(cc, cc_tmp_file)
+cc_tmp_file.close()
 
 # TODO check folder existence
 logger.info('scanning folders')
@@ -75,12 +84,12 @@ for date_folder in os.listdir(args.raw_path):
         task_ply_path = os.path.join(ply_date_folder_path, sub_folder)
         download_ply = not args.no_download
         if args.scanner == 'both':
-            task_east = (task_raw_path, task_ply_path, args.output_path, 'east', download_ply, args.crop, task_log_lv)
-            task_west = (task_raw_path, task_ply_path, args.output_path, 'west', download_ply, args.crop, task_log_lv)
+            task_east = (task_raw_path, task_ply_path, args.output_path, 'east', download_ply, args.crop, task_log_lv, cc_tmp_file.name)
+            task_west = (task_raw_path, task_ply_path, args.output_path, 'west', download_ply, args.crop, task_log_lv, cc_tmp_file.name)
             task_list.append(task_east)
             task_list.append(task_west)
         else:
-            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv)
+            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv, cc_tmp_file.name)
             task_list.append(task)
 total_tasks = len(task_list)
 logger.info('total task: {}'.format(total_tasks))

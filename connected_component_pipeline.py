@@ -320,7 +320,8 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
 
 
 def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
-                 sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.INFO, debug=False, sample_leaves=True):
+                 sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.INFO,
+                 coord_converter=None, debug=False):
     '''
     Run single analysis
     :param raw_data_folder: folder to the raw data. Eg. /path/to/data/raw/scanner3DTop/2016-04-30/2016-04-30__12-55-42-331/
@@ -392,7 +393,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.debug('initialization time elapsed: {0:.3f}s'.format(init_end-init_start))
     # Get data
     get_data_start = timer()
-    # Get .png
+    # Get .png   
     try:
         gIm = sio.imread(os.path.join(raw_data_folder, gIm_name))
         pIm = sio.imread(os.path.join(raw_data_folder, pIm_name))
@@ -438,13 +439,20 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     apply_offset_end = timer()
     logger.debug('ply apply offset time elapsed: {0:.3f}s'.format(apply_offset_end - apply_offset_start))
     # bety query
-    bety_query_start = timer()
-    cc = CC(useSubplot=True)
-    logger.info('bety query start.')
-    cc.bety_query(json_info['date'].strftime('%Y-%m-%d'), useSubplot=True)
-    logger.info('bety query complete.')
-    bety_query_end = timer()
-    logger.debug('bety query time elapsed: {0:.3f}s'.format(bety_query_end - bety_query_start))
+    if coord_converter is None:
+        bety_query_start = timer()
+        cc = CC(useSubplot=True)
+        logger.info('bety query start.')
+        cc.bety_query(json_info['date'].strftime('%Y-%m-%d'), useSubplot=True)
+        logger.info('bety query complete.')
+        bety_query_end = timer()
+        logger.debug('bety query time elapsed: {0:.3f}s'.format(bety_query_end - bety_query_start))
+    else:
+        if type(coord_converter) is CC:
+            cc = coord_converter
+        elif type(coord_converter) is str and os.path.isfile(coord_converter):
+            with open(coord_converter, 'rb') as f:
+                cc = pickle.load(f)
     # align pointcloud
     align_start = timer()
     ply_xyz_map = utils.ply2xyz(ply_data, pIm, gIm)
@@ -475,10 +483,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     logger.info('start processing leaves')
     leaves_proc_start = timer()
     # random sample to reduce the time consuming
-    if sample_leaves and len(mask_list) > 100 and not debug:
-        sampled_idx = np.random.choice(len(mask_list), 100)
-    else:
-        sampled_idx = range(len(mask_list))
+    sampled_idx = range(len(mask_list))
     if debug:
         from tqdm import tqdm
         import sys
