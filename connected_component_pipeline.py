@@ -353,6 +353,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     folder_name = os.path.basename(os.path.dirname(raw_data_folder))
     pkl_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.pkl')
     if debug:
+        logger.info('DEBUG mode ON')
         import cv2
         debug_info = {}
         debug_image_file_path = os.path.join(output_folder, folder_name + '_' + sensor_name + '.png')
