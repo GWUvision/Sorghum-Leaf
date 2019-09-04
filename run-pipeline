@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 
 import os
 import sys
@@ -54,7 +54,8 @@ logger.info('\n\t raw data path: {}'
             '\n\t number of processes: {}'
             .format(args.raw_path, args.ply_path, args.output_path, args.start, args.end, args.scanner, args.crop,
                     not args.no_download, args.processes))
-
+if not os.path.isdir(args.output_path):
+    os.mkdir(args.output_path)
 start_date = datetime.strptime(args.start, '%Y-%m-%d')
 end_date = datetime.strptime(args.end, '%Y-%m-%d')
 if args.coord_converter is None:
