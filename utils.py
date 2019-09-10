@@ -73,7 +73,6 @@ def ply2xyz(ply_data, pIm, gIm):
     pIm_aligned = pIm[:, 2:]
     
     ori_shape = gIm.shape
-    total_points_ply = ply_data.elements[0].data['x'].shape[0]
     true_idx = np.where((pIm_aligned.ravel() != 0) & (gIm.ravel() > 32))[0]
     if true_idx.shape[0] != ply_data['vertex'].count:
         raise Exception('Number of point from ply data does not match with calculated by raw data!')
@@ -90,7 +89,6 @@ def ply2xyz(ply_data, pIm, gIm):
 
 def corrupt_pixel_ratio(pIm, gIm):
     pIm_aligned = pIm[:, 2:]
-    ori_shape = gIm.shape
     total_pixel_count = pIm_aligned.shape[0] * pIm_aligned.shape[1]
     good_pixel_count = np.count_nonzero((pIm_aligned.ravel()!=0) &(gIm.ravel()>32))
     return (total_pixel_count - good_pixel_count) / total_pixel_count
@@ -214,7 +212,7 @@ def ply_offset(ply_data, json_info):
     return ply_data
 
 
-def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower=0.5, pixel_upper=0.05):
+def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower=0.5, pixel_upper=0.05, max_num_leaf_per_plot=None):
     """ heuristic serach valid leaves from the region mask
     Parameters
     ----------
@@ -289,10 +287,14 @@ def heuristic_search_leaf(regions_mask, dxyz, cc, ratio_threshold=3, pixel_lower
         # filter by trimming of region size per plot 
         pixel_count_list = [props.area for props in high_regions_in_plot]
         area_lower, area_upper = np.percentile(pixel_count_list, [pixel_lower*100, 100 - (pixel_upper*100)])
-        for props in high_regions_in_plot:
-            if  props.area > area_upper or props.area < area_lower:
-                continue
-            good_regions_in_plot.append(props)
+        good_regions_in_plot = [props for props in high_regions_in_plot if props.area < area_upper and props.area > area_lower]
+        if max_num_leaf_per_plot is not None and len(good_regions_in_plot) > max_num_leaf_per_plot:
+            good_regions_area_in_plot = [props.area for props in good_regions_in_plot]
+            sort_idice = np.argsort(good_regions_area_in_plot)
+            target_indice_mid = int(sort_idice.shape[0]/2)
+            half_len = int(max_num_leaf_per_plot/2)
+            target_indice = sort_idice[target_indice_mid-half_len: target_indice_mid+(max_num_leaf_per_plot-half_len)]
+            good_regions_in_plot = [good_regions_in_plot[idx] for idx in target_indice] 
         per_plot_good_regions.extend(good_regions_in_plot)
     good_regions = per_plot_good_regions
 

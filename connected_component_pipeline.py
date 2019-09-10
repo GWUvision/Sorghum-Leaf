@@ -33,7 +33,6 @@ def connected_component(image, gradient_threshold=3):
     edge = (np.abs(gx) < gradient_threshold) & (np.abs(gy) < gradient_threshold/2.7)  # & (pc_xyz_square[:, :, 2]>1)
     #all_labels = measure.label(edge, background=0)
     all_labels = measure.label(edge, connectivity=1)
-    label_img = np.zeros(all_labels.shape)
     return all_labels
 
 
@@ -57,7 +56,6 @@ def get_ply_data_from_globus(target_folder, logger=None, sensor_name='east'):
     logger.info('transfer task of {} submitted, response message:{}, task_id:{}.'
           .format(folder_name, response['message'], response['task_id']))
     # block to check status
-    task_status = None
     wait_count = 0
     while not t.transferClient.task_wait(response['task_id'], timeout=60):
         wait_count += 1
@@ -114,13 +112,14 @@ def crop_mask_by_rect(mask, xyz_map, mask_id, rect, downsample=False):
     return cropped_mask, cropped_xyz_map
 
 
-def find_leaves(dxyz_map, cc, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, downsample=True, debug=False):
+def find_leaves(dxyz_map, cc, pixel_lower=0.5, pixel_upper=0.05, ratio_threshold=2, downsample=True, max_num_leaf_per_plot=None,debug=False):
     # connected component
     cc_mask = connected_component(dxyz_map[:, :, 3])
     # heuristic search leaves that ellipse major > 3 * minor
     leaf_bbox_list, label_id_list = \
         utils.heuristic_search_leaf(cc_mask, dxyz_map, cc,
-                                    ratio_threshold=ratio_threshold, pixel_lower=pixel_lower, pixel_upper=pixel_upper)
+                                    ratio_threshold=ratio_threshold, 
+                                    pixel_lower=pixel_lower, pixel_upper=pixel_upper, max_num_leaf_per_plot=max_num_leaf_per_plot)
     mask_list = []
     xyzd_list = []
     for leaf_id, leaf_bbox in zip(label_id_list, leaf_bbox_list):
@@ -193,7 +192,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
                 if 'leaf_length' and 'plot_id' in data.keys():
                     logger.info('Pkl exist, skip.')
                     return 1
-        except Exception as e:
+        except:
             logger.warning('.pkl file exist but corrupted.')
     init_end = timer()
     logger.debug('initialization time elapsed: {0:.3f}s'.format(init_end-init_start))
@@ -219,7 +218,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
     # read .ply
     try:
         ply_data = PlyData.read(ply_data_path)
-    except Exception as e:
+    except:
         logger.error('ply file reading error! Skip. file_path:{}'.format(ply_data_path))
         if download_ply:
             shutil.rmtree(ply_data_folder)
@@ -290,7 +289,7 @@ def run_analysis(raw_data_folder, ply_data_folder, output_folder,
             slm.calc_leaf_width()
             leaf_end = timer()
             logger.debug('leaf processing time elapsed: total {0:.3f} s\n'
-                         '\tinit: {0:.3f} s \n\tlength: {0:.3f} s \n\twidth: {0:.3f} s'
+                         '\tinit: {1:.3f} s \n\tlength: {2:.3f} s \n\twidth: {3:.3f} s'
                          .format(leaf_end - leaf_start,
                                  leaf_length_start - leaf_start,
                                  leaf_width_start - leaf_length_start,
@@ -388,7 +387,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
                 if 'leaf_length' and 'plot_id' in data.keys():
                     logger.info('Pkl exist, skip.')
                     return 1
-        except Exception as e:
+        except:
             logger.warning('.pkl file exist but corrupted.')
     init_end = timer()
     logger.debug('initialization time elapsed: {0:.3f}s'.format(init_end-init_start))
@@ -414,7 +413,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     # read .ply
     try:
         ply_data = PlyData.read(ply_data_path)
-    except Exception as e:
+    except:
         logger.error('ply file reading error! Skip. file_path:{}'.format(ply_data_path))
         if download_ply:
             shutil.rmtree(ply_data_folder)
@@ -471,14 +470,14 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
     leaves_finding_start = timer()
     if debug:
         debug_info['all_mask'], _, debug_info['all_bbox_list'], _, _ = find_leaves(ply_dxyz, cc, pixel_lower=0.0, pixel_upper=0.0, debug=True)
-        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, cc, pixel_lower=0.8, pixel_upper=0.02, debug=True)
+        mask_list, dxyz_list, bbox_list, label_id_list, connected_component_mask = find_leaves(ply_dxyz, cc, pixel_lower=0.82, pixel_upper=0.02, max_num_leaf_per_plot=6,debug=True)
         debug_info['trimmed_by_size_mask'], debug_info['trimmed_by_size_bbox'] = mask_list, bbox_list
         debug_image = gIm.copy()[:, :, np.newaxis].repeat(3, axis=2)
         # find the prop of regions for debugging
         from skimage.measure import regionprops
         regions_prop = regionprops(connected_component_mask.astype(int), ply_dxyz[:, :, 3], coordinates='rc')
     else:
-        mask_list, dxyz_list = find_leaves(ply_dxyz, cc, pixel_lower=0.8, pixel_upper=0.02)
+        mask_list, dxyz_list = find_leaves(ply_dxyz, cc, pixel_lower=0.82, pixel_upper=0.02,  max_num_leaf_per_plot=6)
     leaves_finding_end = timer()
     logger.info('{} leaves found, time elapsed: {}'.format(len(mask_list), leaves_finding_end - leaves_finding_start))
     logger.info('start processing leaves')
@@ -530,7 +529,7 @@ def run_analysis_strip(raw_data_folder, ply_data_folder, output_folder,
             output_props['region_rough'] = utils.region_smoothness(leaf_dxyz[:, :, 3], leaf_mask)
             #output_props['axis_ratio'] = regions_prop[region_id].major_axis_length / regions_prop[region_id].minor_axis_length
 
-            centroid = regions_prop[region_id].centroid
+            # centroid = regions_prop[region_id].centroid
 
             h = bbox_list[idx][2] - bbox_list[idx][0]
             w = bbox_list[idx][3] - bbox_list[idx][1]
