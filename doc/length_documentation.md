@@ -16,8 +16,7 @@ This pipeline uses 3D scanner point cloud and raw data to find leaves
 and compute the leaf length.
 
 ![](./imgs/image4.png)
-1.  Using the connected component algorithm to find the candidate leaf
-    > regions 
+1.  Using the connected component algorithm to find the candidate leaf regions 
     >
     >
     > ![](./imgs/image5.png)![](./imgs/image2.png)
