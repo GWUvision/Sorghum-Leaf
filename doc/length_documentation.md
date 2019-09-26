@@ -15,13 +15,12 @@ Zeyu Zhang, Robert Pless
 This pipeline uses 3D scanner point cloud and raw data to find leaves
 and compute the leaf length.
 
-![](./imgs/image4.png){width="4.894924540682415in"
-height="4.359375546806649in"}
-
+![](./imgs/image4.png)
 1.  Using the connected component algorithm to find the candidate leaf
-    > regions ![](./imgs/image5.png){width="2.5094356955380577in"
-    > height="4.557292213473316in"}![](./imgs/image2.png){width="2.4214938757655293in"
-    > height="4.401042213473316in"}
+    > regions 
+    >
+    >
+    > ![](./imgs/image5.png)![](./imgs/image2.png)
 
 2.  Heuristic search leaves based on the component shape and area
 
@@ -30,8 +29,7 @@ height="4.359375546806649in"}
     > pixel and its neighbor (two points are neighbors if their distance
     > within the image coordinate is less than a threshold).
 
-> ![](./imgs/image3.png){width="5.276042213473316in"
-> height="4.9167104111986in"}
+> ![](./imgs/image3.png)
 >
 > Fig 3. Illustration of the leaf length and width. The pink contour is
 > the outline of the leaf. The blue line is the path of leaf length and
