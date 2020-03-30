@@ -66,10 +66,13 @@ if args.coord_converter is None:
     cc.bety_query(start_date.strftime('%Y-%m-%d'), useSubplot=True)
     logger.info('bety query complete.')
     pickle.dump(cc, cc_tmp_file)
+    logger.info('coord converter dumped to {}'.format(cc_tmp_file.name))
     cc_tmp_file.close()
     cc_file_name = cc_tmp_file.name
 else:
     cc_file_name = args.coord_converter
+    with open(cc_file_name, 'wb') as f:
+        cc = pickle.load(f)
 
 # TODO check folder existence
 logger.info('scanning folders')
