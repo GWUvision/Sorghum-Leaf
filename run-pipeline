@@ -71,7 +71,7 @@ if args.coord_converter is None:
     cc_file_name = cc_tmp_file.name
 else:
     cc_file_name = args.coord_converter
-    with open(cc_file_name, 'wb') as f:
+    with open(cc_file_name, 'rb') as f:
         cc = pickle.load(f)
 
 # TODO check folder existence
