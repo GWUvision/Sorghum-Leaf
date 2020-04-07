@@ -94,12 +94,12 @@ for date_folder in os.listdir(args.raw_path):
         task_ply_path = os.path.join(ply_date_folder_path, sub_folder, '')
         download_ply = not args.no_download
         if args.scanner == 'both':
-            task_east = (task_raw_path, task_ply_path, args.output_path, 'east', download_ply, args.crop, task_log_lv, cc_file_name)
-            task_west = (task_raw_path, task_ply_path, args.output_path, 'west', download_ply, args.crop, task_log_lv, cc_file_name)
+            task_east = (task_raw_path, task_ply_path, args.output_path, 'east', download_ply, args.crop, task_log_lv, cc)
+            task_west = (task_raw_path, task_ply_path, args.output_path, 'west', download_ply, args.crop, task_log_lv, cc)
             task_list.append(task_east)
             task_list.append(task_west)
         else:
-            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv, cc_file_name)
+            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv, ccs)
             task_list.append(task)
 total_tasks = len(task_list)
 logger.info('total task: {}'.format(total_tasks))
