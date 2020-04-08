@@ -99,7 +99,7 @@ for date_folder in os.listdir(args.raw_path):
             task_list.append(task_east)
             task_list.append(task_west)
         else:
-            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv, ccs)
+            task = (task_raw_path, task_ply_path, args.output_path, args.scanner, download_ply, args.crop, task_log_lv, cc)
             task_list.append(task)
 total_tasks = len(task_list)
 logger.info('total task: {}'.format(total_tasks))
